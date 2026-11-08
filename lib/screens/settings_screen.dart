@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:package_manager/package_manager.dart';
 import 'package:media_engine/media_engine.dart';
+import 'package:package_manager/package_manager.dart';
 import '../services/native_bridge.dart';
-import '../theme/liquid_glass_theme.dart';
-import '../widgets/glass_card.dart';
+import '../state/theme_manager.dart';
+import '../theme/app_shapes.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -22,7 +24,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Active installed component versions
   final Map<PackageType, String> _installedVersions = {
-    PackageType.ytdlp: '2026.11.04',
+    PackageType.ytdlp: '2026.11.08',
     PackageType.ytdlpEjs: '0.3.1',
     PackageType.deno: '1.46.3 (arm64-android)',
     PackageType.quickjsNg: '0.8.0 (1.2MB)',
@@ -48,343 +50,318 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _updateStatusMessage = 'Querying official GitHub releases for ARM64...';
     });
 
-    await Future.delayed(const Duration(milliseconds: 1200));
+    await Future.delayed(const Duration(milliseconds: 1100));
 
     if (mounted) {
       setState(() {
         _isCheckingUpdates = false;
-        _updateStatusMessage = 'All 5 components verified & up-to-date with SHA-256 checks.';
+        _updateStatusMessage = 'All components verified & up-to-date with SHA-256 validation.';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings & Engines'),
+        title: const Text('Settings'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        padding: AppSpacing.screenPadding,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Section 1: Package Update Manager
-            _buildSectionHeader('PACKAGE UPDATE MANAGER', Icons.system_update_rounded),
-            const SizedBox(height: 8),
-            const Text(
-              'Meteora updates extractors and runtimes independently from Google Play/APK releases.',
-              style: TextStyle(color: LiquidGlassTheme.textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 14),
-
-            GlassCard(
-              padding: const EdgeInsets.all(16),
-              borderColor: LiquidGlassTheme.cyanAccent.withAlpha(50),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Update Channel',
-                        style: TextStyle(color: LiquidGlassTheme.textPrimary, fontWeight: FontWeight.w600),
-                      ),
-                      DropdownButton<UpdateChannel>(
-                        value: _selectedChannel,
-                        dropdownColor: LiquidGlassTheme.surfaceContainer,
-                        style: const TextStyle(color: LiquidGlassTheme.cyanAccent, fontWeight: FontWeight.bold),
-                        underline: const SizedBox(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => _selectedChannel = val);
-                        },
-                        items: UpdateChannel.values.map((c) {
-                          return DropdownMenuItem(value: c, child: Text(c.label));
-                        }).toList(),
-                      ),
-                    ],
-                  ),
-                  const Divider(color: LiquidGlassTheme.glassBorder, height: 24),
-
-                  // Components list
-                  ...PackageType.values.map((pkg) {
-                    final version = _installedVersions[pkg] ?? 'Not installed';
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(pkg.displayName, style: const TextStyle(color: LiquidGlassTheme.textSecondary, fontSize: 13)),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: LiquidGlassTheme.surfaceHigh,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              version,
-                              style: const TextStyle(color: LiquidGlassTheme.cyanAccent, fontSize: 12, fontFamily: 'monospace'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-
-                  const SizedBox(height: 16),
-                  if (_updateStatusMessage != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: LiquidGlassTheme.emeraldAccent.withAlpha(25),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: LiquidGlassTheme.emeraldAccent.withAlpha(60)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.check_circle_outline, color: LiquidGlassTheme.emeraldAccent, size: 16),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _updateStatusMessage!,
-                              style: const TextStyle(color: LiquidGlassTheme.emeraldAccent, fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
+            // 1. Appearance Section
+            _buildSectionHeader('Appearance', context),
+            const SizedBox(height: AppSpacing.sm),
+            Card(
+              child: Padding(
+                padding: AppSpacing.cardPadding,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Theme Mode', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Choose between standard light/dark or pure black for OLED displays.',
+                      style: theme.textTheme.bodySmall,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
+                    ListenableBuilder(
+                      listenable: ThemeManager.instance,
+                      builder: (context, _) {
+                        return SizedBox(
+                          width: double.infinity,
+                          child: SegmentedButton<AppThemeMode>(
+                            segments: const [
+                              ButtonSegment(value: AppThemeMode.system, label: Text('System')),
+                              ButtonSegment(value: AppThemeMode.light, label: Text('Light')),
+                              ButtonSegment(value: AppThemeMode.dark, label: Text('Dark')),
+                              ButtonSegment(value: AppThemeMode.amoled, label: Text('AMOLED')),
+                            ],
+                            selected: {ThemeManager.instance.currentMode},
+                            onSelectionChanged: (set) => ThemeManager.instance.setThemeMode(set.first),
+                          ),
+                        );
+                      },
+                    ),
                   ],
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isCheckingUpdates ? null : _checkForUpdates,
-                      icon: _isCheckingUpdates
-                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.refresh_rounded, size: 16),
-                      label: Text(_isCheckingUpdates ? 'Checking GitHub...' : 'Check for Component Updates'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: LiquidGlassTheme.cyanAccent,
-                        side: const BorderSide(color: LiquidGlassTheme.cyanAccent),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xl),
 
-            // Section 2: JavaScript Challenge Solver Engine
-            _buildSectionHeader('JAVASCRIPT CHALLENGE SOLVER', Icons.javascript_rounded),
-            const SizedBox(height: 8),
-            const Text(
-              'Executes yt-dlp-ejs to solve YouTube player signatures and dynamic throttling (n-parameter).',
-              style: TextStyle(color: LiquidGlassTheme.textSecondary, fontSize: 13),
+            // 2. Package Update Manager Section
+            _buildSectionHeader('Package Update Manager', context),
+            const SizedBox(height: AppSpacing.sm),
+            Card(
+              child: Padding(
+                padding: AppSpacing.cardPadding,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Release Channel', style: theme.textTheme.titleSmall),
+                            Text('Select update cadence', style: theme.textTheme.bodySmall),
+                          ],
+                        ),
+                        SegmentedButton<UpdateChannel>(
+                          segments: const [
+                            ButtonSegment(value: UpdateChannel.stable, label: Text('Stable')),
+                            ButtonSegment(value: UpdateChannel.nightly, label: Text('Nightly')),
+                          ],
+                          selected: {_selectedChannel},
+                          onSelectionChanged: (set) => setState(() => _selectedChannel = set.first),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: AppSpacing.xl),
+
+                    // Component Versions
+                    ...PackageType.values.map((pkg) {
+                      final version = _installedVersions[pkg] ?? 'Available';
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(pkg.displayName, style: theme.textTheme.bodyMedium),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(AppShapes.extraSmall),
+                              ),
+                              child: Text(
+                                version,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+
+                    const SizedBox(height: AppSpacing.lg),
+                    if (_updateStatusMessage != null) ...[
+                      Container(
+                        padding: AppSpacing.compactCardPadding,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(AppShapes.small),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.check_circle_outline, color: colorScheme.onPrimaryContainer, size: 16),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                _updateStatusMessage!,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _isCheckingUpdates ? null : _checkForUpdates,
+                        icon: _isCheckingUpdates
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh_rounded),
+                        label: Text(_isCheckingUpdates ? 'Validating releases...' : 'Check for Component Updates'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AppSpacing.xl),
 
-            GlassCard(
-              padding: const EdgeInsets.all(12),
+            // 3. JavaScript Challenge Solver Section
+            _buildSectionHeader('JavaScript Challenge Solver', context),
+            const SizedBox(height: AppSpacing.sm),
+            Card(
               child: Column(
                 children: [
-                  InkWell(
+                  ListTile(
+                    leading: Icon(
+                      _selectedJsRuntime == JsRuntimeType.deno
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                      color: _selectedJsRuntime == JsRuntimeType.deno ? colorScheme.primary : null,
+                    ),
+                    title: const Text('Deno (Primary & Recommended)'),
+                    subtitle: const Text(
+                      'Official V8 runtime. Guaranteed 100% compatibility with yt-dlp-ejs challenges.',
+                    ),
+                    selected: _selectedJsRuntime == JsRuntimeType.deno,
                     onTap: () => setState(() => _selectedJsRuntime = JsRuntimeType.deno),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _selectedJsRuntime == JsRuntimeType.deno
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_off,
-                            color: LiquidGlassTheme.cyanAccent,
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Deno (Primary & Recommended)',
-                                  style: TextStyle(
-                                    color: LiquidGlassTheme.textPrimary,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  'Upstream default V8 engine. Guaranteed compatibility with all EJS challenge distributions.',
-                                  style: TextStyle(color: LiquidGlassTheme.textMuted, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
-                  const Divider(color: LiquidGlassTheme.glassBorder),
-                  InkWell(
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: Icon(
+                      _selectedJsRuntime == JsRuntimeType.quickjs
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                      color: _selectedJsRuntime == JsRuntimeType.quickjs ? colorScheme.primary : null,
+                    ),
+                    title: const Text('QuickJS-NG (Lightweight Alternative)'),
+                    subtitle: const Text(
+                      'Native Android NDK C binary (~1.2MB). Ultra-low memory (<8MB RAM) and sub-5ms startup.',
+                    ),
+                    selected: _selectedJsRuntime == JsRuntimeType.quickjs,
                     onTap: () => setState(() => _selectedJsRuntime = JsRuntimeType.quickjs),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _selectedJsRuntime == JsRuntimeType.quickjs
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_off,
-                            color: LiquidGlassTheme.cyanAccent,
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'QuickJS-NG (Ultra-Lightweight Alternative)',
-                                  style: TextStyle(
-                                    color: LiquidGlassTheme.textPrimary,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  'Native NDK C binary (~1.2MB). Ultra-low memory footprint (<8MB RAM) and sub-5ms startup.',
-                                  style: TextStyle(color: LiquidGlassTheme.textMuted, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            // 4. Hardware Diagnostics Section
+            _buildSectionHeader('Hardware Diagnostics', context),
+            const SizedBox(height: AppSpacing.sm),
+            Card(
+              child: Padding(
+                padding: AppSpacing.cardPadding,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Display Resolution', style: theme.textTheme.bodyMedium),
+                        Text(
+                          '${_deviceCapabilities.displayWidth}x${_deviceCapabilities.displayHeight} @ ${_deviceCapabilities.displayRefreshRate.round()}Hz',
+                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Available Storage', style: theme.textTheme.bodyMedium),
+                        Text(
+                          '${(_deviceCapabilities.freeStorageBytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB',
+                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: AppSpacing.xl),
+
+                    Text('Hardware Video Decoders', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        _CodecChip(label: 'AV1 (av01)', isSupported: _deviceCapabilities.supportsVideoCodec('av1')),
+                        _CodecChip(label: 'VP9', isSupported: _deviceCapabilities.supportsVideoCodec('vp9')),
+                        _CodecChip(label: 'HEVC / H.265', isSupported: _deviceCapabilities.supportsVideoCodec('hevc')),
+                        _CodecChip(label: 'AVC / H.264', isSupported: _deviceCapabilities.supportsVideoCodec('h264')),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    Text('Hardware Audio Decoders', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        _CodecChip(label: 'Opus', isSupported: _deviceCapabilities.supportsAudioCodec('opus')),
+                        _CodecChip(label: 'AAC', isSupported: _deviceCapabilities.supportsAudioCodec('aac')),
+                        _CodecChip(label: 'MP3', isSupported: _deviceCapabilities.supportsAudioCodec('mp3')),
+                        _CodecChip(label: 'FLAC', isSupported: _deviceCapabilities.supportsAudioCodec('flac')),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 24),
-
-            // Section 3: Hardware Codec Diagnostics
-            _buildSectionHeader('HARDWARE CODEC DIAGNOSTICS', Icons.memory_rounded),
-            const SizedBox(height: 8),
-            const Text(
-              'Hardware decoders queried directly from Android MediaCodecList.',
-              style: TextStyle(color: LiquidGlassTheme.textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 14),
-
-            GlassCard(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Display Resolution', style: TextStyle(color: LiquidGlassTheme.textSecondary, fontSize: 13)),
-                      Text('${_deviceCapabilities.displayWidth}x${_deviceCapabilities.displayHeight} @ ${_deviceCapabilities.displayRefreshRate.round()}Hz',
-                          style: const TextStyle(color: LiquidGlassTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Free Internal Storage', style: TextStyle(color: LiquidGlassTheme.textSecondary, fontSize: 13)),
-                      Text('${(_deviceCapabilities.freeStorageBytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB',
-                          style: const TextStyle(color: LiquidGlassTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const Divider(color: LiquidGlassTheme.glassBorder, height: 24),
-
-                  const Text('Supported Video Codecs', style: TextStyle(color: LiquidGlassTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _CodecBadge(label: 'AV1 (av01)', isSupported: _deviceCapabilities.supportsVideoCodec('av1')),
-                      _CodecBadge(label: 'VP9', isSupported: _deviceCapabilities.supportsVideoCodec('vp9')),
-                      _CodecBadge(label: 'HEVC / H.265', isSupported: _deviceCapabilities.supportsVideoCodec('hevc')),
-                      _CodecBadge(label: 'AVC / H.264', isSupported: _deviceCapabilities.supportsVideoCodec('h264')),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  const Text('Supported Audio Codecs', style: TextStyle(color: LiquidGlassTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _CodecBadge(label: 'Opus', isSupported: _deviceCapabilities.supportsAudioCodec('opus')),
-                      _CodecBadge(label: 'AAC', isSupported: _deviceCapabilities.supportsAudioCodec('aac')),
-                      _CodecBadge(label: 'MP3', isSupported: _deviceCapabilities.supportsAudioCodec('mp3')),
-                      _CodecBadge(label: 'FLAC', isSupported: _deviceCapabilities.supportsAudioCodec('flac')),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
+            const SizedBox(height: AppSpacing.xxl),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: LiquidGlassTheme.cyanAccent, size: 18),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(
-            color: LiquidGlassTheme.cyanAccent,
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
-          ),
-        ),
-      ],
+  Widget _buildSectionHeader(String title, BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+      ),
     );
   }
 }
 
-class _CodecBadge extends StatelessWidget {
+class _CodecChip extends StatelessWidget {
   final String label;
   final bool isSupported;
 
-  const _CodecBadge({required this.label, required this.isSupported});
+  const _CodecChip({required this.label, required this.isSupported});
 
   @override
   Widget build(BuildContext context) {
-    final color = isSupported ? LiquidGlassTheme.emeraldAccent : LiquidGlassTheme.textMuted;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(80)),
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Chip(
+      avatar: Icon(
+        isSupported ? Icons.check_circle_rounded : Icons.cancel_outlined,
+        size: 16,
+        color: isSupported ? colorScheme.primary : colorScheme.outline,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(isSupported ? Icons.check_circle_rounded : Icons.cancel_outlined, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
-        ],
-      ),
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      backgroundColor: isSupported ? colorScheme.surfaceContainerHighest : colorScheme.surfaceContainerLow,
     );
   }
 }

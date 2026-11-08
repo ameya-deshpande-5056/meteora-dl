@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:media_library/media_library.dart';
 import '../state/download_state.dart';
-import '../theme/liquid_glass_theme.dart';
-import '../widgets/glass_card.dart';
+import '../theme/app_shapes.dart';
+import '../theme/app_spacing.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -12,18 +12,29 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   LibraryMediaType? _typeFilter;
   SortOption _sortOption = SortOption.dateAddedDesc;
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Media Library'),
         actions: [
           PopupMenuButton<SortOption>(
-            icon: const Icon(Icons.sort_rounded, color: LiquidGlassTheme.cyanAccent),
+            icon: const Icon(Icons.sort_rounded),
+            tooltip: 'Sort media',
             onSelected: (opt) => setState(() => _sortOption = opt),
             itemBuilder: (context) => SortOption.values.map((opt) {
               return PopupMenuItem(
@@ -31,8 +42,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 child: Text(
                   opt.label,
                   style: TextStyle(
-                    color: _sortOption == opt ? LiquidGlassTheme.cyanAccent : LiquidGlassTheme.textPrimary,
-                    fontWeight: _sortOption == opt ? FontWeight.bold : FontWeight.normal,
+                    color: _sortOption == opt ? colorScheme.primary : null,
+                    fontWeight: _sortOption == opt ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
               );
@@ -52,49 +63,56 @@ class _LibraryScreenState extends State<LibraryScreen> {
           final filteredItems = filter.apply(items);
 
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Search & Filter Row
+              // Search Bar & Filter Chips
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
                 child: Column(
                   children: [
-                    TextField(
-                      style: const TextStyle(color: LiquidGlassTheme.textPrimary, fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: 'Search offline media...',
-                        hintStyle: const TextStyle(color: LiquidGlassTheme.textMuted, fontSize: 13),
-                        prefixIcon: const Icon(Icons.search_rounded, color: LiquidGlassTheme.textSecondary, size: 20),
-                        filled: true,
-                        fillColor: LiquidGlassTheme.surfaceContainer,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: LiquidGlassTheme.glassBorder),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      ),
+                    SearchBar(
+                      controller: _searchController,
+                      elevation: const WidgetStatePropertyAll(0),
+                      backgroundColor: WidgetStatePropertyAll(colorScheme.surfaceContainerHigh),
+                      hintText: 'Search offline media...',
+                      leading: const Icon(Icons.search_rounded),
+                      trailing: _searchController.text.isNotEmpty
+                          ? [
+                              IconButton(
+                                icon: const Icon(Icons.clear_rounded),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            ]
+                          : null,
                       onChanged: (val) => setState(() => _searchQuery = val),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _FilterChip(
-                          label: 'All Media',
-                          isSelected: _typeFilter == null,
-                          onTap: () => setState(() => _typeFilter = null),
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChip(
-                          label: 'Videos',
-                          isSelected: _typeFilter == LibraryMediaType.video,
-                          onTap: () => setState(() => _typeFilter = LibraryMediaType.video),
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChip(
-                          label: 'Audio Only',
-                          isSelected: _typeFilter == LibraryMediaType.audio,
-                          onTap: () => setState(() => _typeFilter = LibraryMediaType.audio),
-                        ),
-                      ],
+                    const SizedBox(height: AppSpacing.sm),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          FilterChip(
+                            label: const Text('All Media'),
+                            selected: _typeFilter == null,
+                            onSelected: (_) => setState(() => _typeFilter = null),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          FilterChip(
+                            label: const Text('Videos'),
+                            selected: _typeFilter == LibraryMediaType.video,
+                            onSelected: (_) => setState(() => _typeFilter = LibraryMediaType.video),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          FilterChip(
+                            label: const Text('Audio Only'),
+                            selected: _typeFilter == LibraryMediaType.audio,
+                            onSelected: (_) => setState(() => _typeFilter = LibraryMediaType.audio),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -103,33 +121,47 @@ class _LibraryScreenState extends State<LibraryScreen> {
               // Media Items
               Expanded(
                 child: filteredItems.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.video_library_outlined, size: 64, color: LiquidGlassTheme.textMuted.withAlpha(100)),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Library is empty',
-                              style: TextStyle(color: LiquidGlassTheme.textSecondary, fontSize: 16),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Downloaded media will appear here automatically',
-                              style: TextStyle(color: LiquidGlassTheme.textMuted, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      )
+                    ? _buildEmptyState(context)
                     : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: AppSpacing.screenPadding,
                         itemCount: filteredItems.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                         itemBuilder: (context, index) {
                           final item = filteredItems[index];
-                          return _MediaLibraryCard(
-                            item: item,
-                            onPlay: () => _openMediaModal(context, item),
+                          return Card(
+                            child: ListTile(
+                              leading: ClipRRect(
+                                borderRadius: BorderRadius.circular(AppShapes.small),
+                                child: Container(
+                                  width: 48,
+                                  height: 48,
+                                  color: colorScheme.surfaceContainerHighest,
+                                  child: Icon(
+                                    item.mediaType == LibraryMediaType.video
+                                        ? Icons.movie_outlined
+                                        : Icons.audiotrack_outlined,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                item.title,
+                                style: theme.textTheme.titleSmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                '${item.resolution ?? "HD"} • Saved to MediaStore',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.play_circle_fill_rounded),
+                                color: colorScheme.primary,
+                                iconSize: 32,
+                                onPressed: () => _openMediaModal(context, item),
+                              ),
+                              onTap: () => _openMediaModal(context, item),
+                            ),
                           );
                         },
                       ),
@@ -141,171 +173,103 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  void _openMediaModal(BuildContext context, MediaItem item) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: const BoxDecoration(
-            color: LiquidGlassTheme.surfaceContainer,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: LiquidGlassTheme.glassBorder,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              // Media Player simulation
-              Container(
-                height: 200,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.play_circle_fill_rounded, color: LiquidGlassTheme.cyanAccent, size: 54),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Android Media3 / ExoPlayer',
-                        style: TextStyle(color: LiquidGlassTheme.textSecondary, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                item.title,
-                style: const TextStyle(
-                  color: LiquidGlassTheme.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${item.resolution ?? "HD"} • ${item.videoCodec ?? "AV1"} • Offline Playback',
-                style: const TextStyle(color: LiquidGlassTheme.textMuted, fontSize: 12),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
+  Widget _buildEmptyState(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _FilterChip({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? LiquidGlassTheme.cyanAccent.withAlpha(40) : LiquidGlassTheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? LiquidGlassTheme.cyanAccent.withAlpha(100) : LiquidGlassTheme.glassBorder,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? LiquidGlassTheme.cyanAccent : LiquidGlassTheme.textSecondary,
-            fontSize: 11,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHigh,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.video_library_outlined,
+                size: 48,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Your Library is Empty',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Downloaded videos and audio tracks will be indexed here automatically.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
-}
 
-class _MediaLibraryCard extends StatelessWidget {
-  final MediaItem item;
-  final VoidCallback onPlay;
+  void _openMediaModal(BuildContext context, MediaItem item) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-  const _MediaLibraryCard({required this.item, required this.onPlay});
-
-  @override
-  Widget build(BuildContext context) {
-    final isVideo = item.mediaType == LibraryMediaType.video;
-
-    return GlassCard(
-      padding: const EdgeInsets.all(12),
-      onTap: onPlay,
-      child: Row(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: LiquidGlassTheme.surfaceHigh,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              isVideo ? Icons.movie_outlined : Icons.audiotrack_rounded,
-              color: isVideo ? LiquidGlassTheme.cyanAccent : LiquidGlassTheme.indigoAccent,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
+    showModalBottomSheet(
+      context: context,
+      shape: AppShapes.bottomSheetShape,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Player Screen Box
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppShapes.medium),
+                  child: Container(
+                    height: 200,
+                    width: double.infinity,
+                    color: Colors.black,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.play_circle_fill_rounded, size: 56, color: colorScheme.primary),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Android Media3 / ExoPlayer Engine',
+                            style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
                 Text(
                   item.title,
-                  style: const TextStyle(
-                    color: LiquidGlassTheme.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
+                  style: theme.textTheme.titleMedium,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '${item.resolution ?? "HD"} • Saved to MediaStore',
-                  style: const TextStyle(color: LiquidGlassTheme.textMuted, fontSize: 11),
+                  '${item.resolution ?? "HD"} • ${item.videoCodec ?? "AV1"} • Local MediaStore',
+                  style: theme.textTheme.bodySmall,
                 ),
+                const SizedBox(height: AppSpacing.lg),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.play_circle_filled_rounded, color: LiquidGlassTheme.cyanAccent, size: 28),
-            onPressed: onPlay,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

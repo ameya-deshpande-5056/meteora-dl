@@ -6,8 +6,8 @@ void main() {
     await tester.pumpWidget(const MeteoraDLApp());
     await tester.pumpAndSettle();
 
-    // Verify METEORADL brand title is displayed
-    expect(find.text('METEORADL'), findsOneWidget);
+    // Verify MeteoraDL brand title is displayed
+    expect(find.text('MeteoraDL'), findsOneWidget);
 
     // Verify all 4 navigation destinations exist
     expect(find.text('Home'), findsOneWidget);
@@ -28,8 +28,13 @@ void main() {
     // Tap Settings tab
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('PACKAGE UPDATE MANAGER'), findsOneWidget);
-    expect(find.text('JAVASCRIPT CHALLENGE SOLVER'), findsOneWidget);
-    expect(find.text('HARDWARE CODEC DIAGNOSTICS'), findsOneWidget);
+    expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Package Update Manager'), findsOneWidget);
+    expect(find.text('JavaScript Challenge Solver'), findsOneWidget);
+    expect(find.text('Hardware Diagnostics'), findsOneWidget);
+
+    // Tap AMOLED theme button
+    await tester.tap(find.text('AMOLED'));
+    await tester.pumpAndSettle();
   });
 }

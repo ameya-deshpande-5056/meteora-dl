@@ -6,7 +6,9 @@ import 'screens/library_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/native_bridge.dart';
 import 'state/download_state.dart';
-import 'theme/liquid_glass_theme.dart';
+import 'state/theme_manager.dart';
+import 'theme/app_theme.dart';
+import 'widgets/adaptive_scaffold.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +18,7 @@ void main() {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: LiquidGlassTheme.background,
+      systemNavigationBarColor: Colors.transparent,
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
@@ -29,11 +31,18 @@ class MeteoraDLApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'MeteoraDL',
-      debugShowCheckedModeBanner: false,
-      theme: LiquidGlassTheme.themeData,
-      home: const MainNavigationScreen(),
+    return ListenableBuilder(
+      listenable: ThemeManager.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'MeteoraDL',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: ThemeManager.instance.activeDarkTheme,
+          themeMode: ThemeManager.instance.flutterThemeMode,
+          home: const MainNavigationScreen(),
+        );
+      },
     );
   }
 }
@@ -88,44 +97,41 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          HomeScreen(
-            onNavigateToDownloads: () => setState(() => _currentIndex = 1),
-          ),
-          const DownloadsScreen(),
-          const LibraryScreen(),
-          const SettingsScreen(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.downloading_outlined),
-            selectedIcon: Icon(Icons.downloading_rounded),
-            label: 'Downloads',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.video_library_outlined),
-            selectedIcon: Icon(Icons.video_library_rounded),
-            label: 'Library',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
-            label: 'Settings',
-          ),
-        ],
-      ),
+    return AdaptiveScaffold(
+      currentIndex: _currentIndex,
+      onNavigationChanged: (idx) => setState(() => _currentIndex = idx),
+      destinations: const [
+        AdaptiveDestination(
+          icon: Icons.home_outlined,
+          selectedIcon: Icons.home_rounded,
+          label: 'Home',
+        ),
+        AdaptiveDestination(
+          icon: Icons.downloading_outlined,
+          selectedIcon: Icons.downloading_rounded,
+          label: 'Downloads',
+        ),
+        AdaptiveDestination(
+          icon: Icons.video_library_outlined,
+          selectedIcon: Icons.video_library_rounded,
+          label: 'Library',
+        ),
+        AdaptiveDestination(
+          icon: Icons.settings_outlined,
+          selectedIcon: Icons.settings_rounded,
+          label: 'Settings',
+        ),
+      ],
+      screens: [
+        HomeScreen(
+          onNavigateToDownloads: () => setState(() => _currentIndex = 1),
+        ),
+        DownloadsScreen(
+          onNavigateToHome: () => setState(() => _currentIndex = 0),
+        ),
+        const LibraryScreen(),
+        const SettingsScreen(),
+      ],
     );
   }
 }
