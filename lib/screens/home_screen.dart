@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:media_engine/media_engine.dart';
 import 'package:package_manager/package_manager.dart';
 import 'package:path_provider/path_provider.dart';
+import '../services/direct_media_engine.dart';
 import '../services/native_bridge.dart';
 import '../state/download_state.dart';
 import '../theme/app_shapes.dart';
@@ -167,9 +168,42 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      await _checkEngineStatus();
+      // 1. Direct Media Extraction Engine (Fast, native Dart stream resolution)
+      if (DirectMediaEngine.instance.isSupported(url)) {
+        try {
+          if (url.contains('list=') || url.contains('/playlist')) {
+            final playlist = await DirectMediaEngine.instance.extractPlaylist(url);
+            if (playlist != null && playlist.entries.isNotEmpty && mounted) {
+              setState(() {
+                _extractedPlaylist = playlist;
+                _selectedPlaylistEntryIds.clear();
+                _selectedPlaylistEntryIds.addAll(playlist.entries.map((e) => e.id));
+                _isExtracting = false;
+              });
+              return;
+            }
+          }
 
-      // Attempt real native extraction if engine is present
+          final media = await DirectMediaEngine.instance.extractVideo(url);
+          if (media != null && mounted) {
+            final selector = IntelligentFormatSelector(preference: _qualityPreference);
+            final rec = selector.recommendFormat(media: media, device: _deviceCapabilities);
+
+            setState(() {
+              _extractedMedia = media;
+              _recommendation = rec;
+              _selectedFormat = rec.videoFormat ?? (media.formats.isNotEmpty ? media.formats.first : null);
+              _isExtracting = false;
+            });
+            return;
+          }
+        } catch (_) {
+          // Network unavailable or in widget test: fall through to native process engine / mock channel
+        }
+      }
+
+      // 2. Native Process-Based yt-dlp Extraction
+      await _checkEngineStatus();
       if (_engineInstalled) {
         final command = [
           'yt-dlp',
@@ -214,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      // If engine is not installed, query oEmbed for real title, author, and thumbnail of the actual pasted URL
+      // 3. Fallback to oEmbed metadata preview if available
       final oembed = await _fetchOEmbedMetadata(url);
       if (oembed != null) {
         final title = (oembed['title'] ?? 'Online Media Stream').toString();
@@ -273,10 +307,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final taskId = 'task_${DateTime.now().millisecondsSinceEpoch}';
     final formatLabel = _selectedFormat?.resolutionLabel ?? _recommendation?.reasoning ?? 'Default Stream';
+    final targetUrl = _urlController.text.trim();
 
     final task = DownloadTask(
       taskId: taskId,
-      url: _urlController.text.trim(),
+      url: targetUrl,
       title: _extractedMedia!.title,
       thumbnailUrl: _extractedMedia!.thumbnail,
       formatLabel: formatLabel,
@@ -289,19 +324,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
     DownloadStateManager.instance.addTask(task);
 
-    // Launch real native background download
-    NativeBridge.startForegroundDownload(
-      taskId: taskId,
-      title: task.title,
-      command: [
-        'yt-dlp',
-        '--no-warnings',
-        if (_recommendation != null) ...[
-          '-f', _recommendation!.ytdlpFormatSelector,
+    // If DirectMediaEngine supports this URL, download actual media byte streams directly
+    if (DirectMediaEngine.instance.isSupported(targetUrl)) {
+      DirectMediaEngine.instance.startDownload(
+        taskId: taskId,
+        videoUrl: targetUrl,
+        title: _extractedMedia!.title,
+        thumbnailUrl: _extractedMedia!.thumbnail,
+        formatId: _selectedFormat?.formatId ?? 'muxed',
+        formatLabel: formatLabel,
+      );
+    } else {
+      // Dispatch to native Kotlin foreground service with yt-dlp
+      NativeBridge.startForegroundDownload(
+        taskId: taskId,
+        title: task.title,
+        command: [
+          'yt-dlp',
+          '--no-warnings',
+          if (_recommendation != null) ...[
+            '-f', _recommendation!.ytdlpFormatSelector,
+          ],
+          targetUrl,
         ],
-        _urlController.text.trim(),
-      ],
-    );
+      );
+    }
 
     widget.onNavigateToDownloads();
   }
@@ -332,15 +379,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
       DownloadStateManager.instance.addTask(task);
 
-      NativeBridge.startForegroundDownload(
-        taskId: taskId,
-        title: entry.title,
-        command: [
-          'yt-dlp',
-          '--no-warnings',
-          entry.url,
-        ],
-      );
+      if (DirectMediaEngine.instance.isSupported(entry.url)) {
+        DirectMediaEngine.instance.startDownload(
+          taskId: taskId,
+          videoUrl: entry.url,
+          title: entry.title,
+          thumbnailUrl: entry.thumbnail,
+          formatId: _qualityPreference == QualityPreference.audioOnly ? 'audio' : 'muxed',
+          formatLabel: formatLabel,
+        );
+      } else {
+        NativeBridge.startForegroundDownload(
+          taskId: taskId,
+          title: entry.title,
+          command: [
+            'yt-dlp',
+            '--no-warnings',
+            entry.url,
+          ],
+        );
+      }
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -666,7 +724,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // Engine Installation Banner (shown if local binary is missing)
+              // Engine Installation Banner (shown if local binary is missing and link requires it)
               if (!_engineInstalled) ...[
                 const SizedBox(height: AppSpacing.lg),
                 Container(
@@ -685,7 +743,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(width: AppSpacing.sm),
                           Expanded(
                             child: Text(
-                              'yt-dlp Extractor Engine Required',
+                              'yt-dlp Extractor Engine Required for Other Sites',
                               style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                             ),
                           ),
@@ -693,7 +751,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        'MeteoraDL downloads directly on-device using yt-dlp. Install the official ARM64 binary into app storage to enable multi-stream format extraction and merging.',
+                        'YouTube downloads work directly. To download from Instagram, Twitter/X, TikTok, and Bilibili, install the yt-dlp binary into app storage.',
                         style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
                       ),
                       const SizedBox(height: AppSpacing.md),
@@ -708,7 +766,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.download_rounded, size: 18),
-                          label: Text(_isInstallingEngine ? 'Installing yt-dlp engine...' : 'Install Extractor Engine'),
+                          label: Text(_isInstallingEngine ? 'Installing yt-dlp engine...' : 'Install yt-dlp Extractor Engine'),
                         ),
                       ),
                     ],
