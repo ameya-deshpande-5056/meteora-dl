@@ -56,8 +56,14 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getDeviceCapabilities" -> {
-                    val caps = capabilityDetector.getCapabilities()
-                    result.success(caps)
+                    scope.launch {
+                        try {
+                            val caps = capabilityDetector.getCapabilities()
+                            result.success(caps)
+                        } catch (e: Throwable) {
+                            result.error("CAPABILITY_ERROR", e.localizedMessage ?: "Unknown error", null)
+                        }
+                    }
                 }
 
                 "getInitialSharedUrl" -> {

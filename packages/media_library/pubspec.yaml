@@ -8,6 +8,8 @@ environment:
 
 dependencies:
   meta: ^1.15.0
+  drift: '>=2.18.0 <2.25.0'
+  sqlite3: '>=2.4.0 <2.5.0'
 
 dev_dependencies:
   test: ^1.25.0

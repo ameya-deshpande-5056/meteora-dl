@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:media_library/media_library.dart';
+import 'package:path_provider/path_provider.dart';
 
 enum TaskStatus {
   queued,
@@ -77,11 +78,52 @@ class DownloadTask {
       createdAt: createdAt,
     );
   }
+
+  DownloadTaskRecord toRecord() => DownloadTaskRecord(
+    taskId: taskId,
+    url: url,
+    title: title,
+    thumbnailUrl: thumbnailUrl,
+    formatLabel: formatLabel,
+    progressPercent: progressPercent,
+    speedText: speedText,
+    etaText: etaText,
+    totalSizeText: totalSizeText,
+    status: status.name,
+    filePath: filePath,
+    errorMessage: errorMessage,
+    createdAt: createdAt,
+  );
+
+  factory DownloadTask.fromRecord(DownloadTaskRecord record) {
+    final taskStatus = TaskStatus.values.firstWhere(
+      (s) => s.name == record.status,
+      orElse: () => TaskStatus.queued,
+    );
+    return DownloadTask(
+      taskId: record.taskId,
+      url: record.url,
+      title: record.title,
+      thumbnailUrl: record.thumbnailUrl,
+      formatLabel: record.formatLabel,
+      progressPercent: record.progressPercent,
+      speedText: record.speedText,
+      etaText: record.etaText,
+      totalSizeText: record.totalSizeText,
+      status: taskStatus,
+      filePath: record.filePath,
+      errorMessage: record.errorMessage,
+      createdAt: record.createdAt,
+    );
+  }
 }
 
 class DownloadStateManager extends ChangeNotifier {
   static final DownloadStateManager instance = DownloadStateManager._internal();
   DownloadStateManager._internal();
+
+  MeteoraDatabase? _database;
+  bool _initialized = false;
 
   final List<DownloadTask> _tasks = [];
   final List<MediaItem> _libraryItems = [];
@@ -93,8 +135,48 @@ class DownloadStateManager extends ChangeNotifier {
       _tasks.where((t) => t.status == TaskStatus.completed).toList();
   List<MediaItem> get libraryItems => List.unmodifiable(_libraryItems);
 
+  Future<void> init({MeteoraDatabase? db}) async {
+    if (_initialized && db == null) return;
+
+    if (db != null) {
+      _database = db;
+    } else {
+      try {
+        final appDir = await getApplicationDocumentsDirectory()
+            .timeout(const Duration(milliseconds: 600));
+        final dbPath = '${appDir.path}/meteora.db';
+        _database = MeteoraDatabase.openFile(dbPath);
+      } catch (_) {
+        _database = MeteoraDatabase.openInMemory();
+      }
+    }
+
+    _initialized = true;
+
+    // Load persisted tasks
+    final taskRecords = _database!.getAllTasks();
+    _tasks.clear();
+    for (final rec in taskRecords) {
+      var task = DownloadTask.fromRecord(rec);
+      // Unfinished downloads upon app kill are safely marked as paused for retry
+      if (task.status == TaskStatus.downloading) {
+        task = task.copyWith(status: TaskStatus.paused);
+        _database!.updateTaskStatus(task.taskId, 'paused');
+      }
+      _tasks.add(task);
+    }
+
+    // Load persisted media library items
+    final mediaRecords = _database!.getAllMediaItems();
+    _libraryItems.clear();
+    _libraryItems.addAll(mediaRecords);
+
+    notifyListeners();
+  }
+
   void addTask(DownloadTask task) {
     _tasks.insert(0, task);
+    _database?.insertOrUpdateTask(task.toRecord());
     notifyListeners();
   }
 
@@ -117,22 +199,31 @@ class DownloadStateManager extends ChangeNotifier {
       );
       _tasks[index] = updated;
 
+      _database?.updateTaskProgress(
+        taskId: taskId,
+        percent: percent,
+        speed: speed,
+        eta: eta,
+        totalSize: totalSize,
+        status: status.name,
+      );
+
       // If completed, add to library
       if (status == TaskStatus.completed) {
-        _libraryItems.insert(
-          0,
-          MediaItem(
-            id: updated.taskId,
-            title: updated.title,
-            localFilePath: updated.filePath ?? '',
-            thumbnailPath: updated.thumbnailUrl,
-            mediaType: updated.formatLabel.contains('Audio') ? LibraryMediaType.audio : LibraryMediaType.video,
-            durationSeconds: 0,
-            fileSizeBytes: 0,
-            resolution: updated.formatLabel,
-            addedAt: DateTime.now(),
-          ),
+        final item = MediaItem(
+          id: updated.taskId,
+          title: updated.title,
+          localFilePath: updated.filePath ?? '',
+          thumbnailPath: updated.thumbnailUrl,
+          mediaType: updated.formatLabel.contains('Audio') ? LibraryMediaType.audio : LibraryMediaType.video,
+          durationSeconds: 0,
+          fileSizeBytes: 0,
+          resolution: updated.formatLabel,
+          addedAt: DateTime.now(),
         );
+
+        _libraryItems.insert(0, item);
+        _database?.insertOrUpdateMediaItem(item);
       }
 
       notifyListeners();
@@ -143,12 +234,20 @@ class DownloadStateManager extends ChangeNotifier {
     final index = _tasks.indexWhere((t) => t.taskId == taskId);
     if (index != -1) {
       _tasks[index] = _tasks[index].copyWith(status: TaskStatus.cancelled);
+      _database?.updateTaskStatus(taskId, 'cancelled');
       notifyListeners();
     }
   }
 
   void removeTask(String taskId) {
     _tasks.removeWhere((t) => t.taskId == taskId);
+    _database?.deleteTask(taskId);
+    notifyListeners();
+  }
+
+  void deleteMediaItem(String id) {
+    _libraryItems.removeWhere((item) => item.id == id);
+    _database?.deleteMediaItem(id);
     notifyListeners();
   }
 }

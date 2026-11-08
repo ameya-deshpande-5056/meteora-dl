@@ -282,6 +282,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      DownloadStateManager.instance.deleteMediaItem(item.id);
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('Delete from Library'),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
               ],
             ),
           ),

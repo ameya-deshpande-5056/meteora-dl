@@ -15,14 +15,20 @@ import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
 import android.view.WindowManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class DeviceCapabilityDetector(private val context: Context) {
 
     companion object {
         private const val TAG = "CapabilityDetector"
+        @Volatile
+        private var cachedCapabilities: Map<String, Any>? = null
     }
 
-    fun getCapabilities(): Map<String, Any> {
+    suspend fun getCapabilities(): Map<String, Any> = withContext(Dispatchers.IO) {
+        cachedCapabilities?.let { return@withContext it }
+
         var width = 1080
         var height = 2400
         var refreshRate = 60.0f
@@ -71,7 +77,7 @@ class DeviceCapabilityDetector(private val context: Context) {
         val isMetered = isNetworkMetered()
         val (batteryLevel, isCharging) = getBatteryStatus()
 
-        return mapOf(
+        val capabilities = mapOf(
             "displayWidth" to width,
             "displayHeight" to height,
             "displayRefreshRate" to refreshRate.toDouble(),
@@ -82,6 +88,8 @@ class DeviceCapabilityDetector(private val context: Context) {
             "batteryLevelPercent" to batteryLevel,
             "isCharging" to isCharging
         )
+        cachedCapabilities = capabilities
+        capabilities
     }
 
     private fun detectVideoCodecs(): List<String> {

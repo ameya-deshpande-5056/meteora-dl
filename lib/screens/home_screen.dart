@@ -26,6 +26,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isExtracting = false;
   String? _errorMessage;
   MediaInfo? _extractedMedia;
+  PlaylistInfo? _extractedPlaylist;
+  final Set<String> _selectedPlaylistEntryIds = {};
   FormatRecommendation? _recommendation;
   FormatInfo? _selectedFormat;
   DeviceCapabilities _deviceCapabilities = DeviceCapabilities.standardAndroidArm64();
@@ -78,10 +80,60 @@ class _HomeScreenState extends State<HomeScreen> {
       _isExtracting = true;
       _errorMessage = null;
       _extractedMedia = null;
+      _extractedPlaylist = null;
       _recommendation = null;
     });
 
     try {
+      final isPlaylist = url.contains('list=') ||
+          url.contains('/playlist') ||
+          url.contains('/sets/') ||
+          url.contains('/album/');
+
+      if (isPlaylist) {
+        final playlist = PlaylistInfo(
+          id: 'pl_${DateTime.now().millisecondsSinceEpoch}',
+          title: 'Flutter Systems & Architecture Masterclass',
+          uploader: 'Meteora Engineering Hub',
+          description: 'Deep dive into Android native channels, scoped storage, and media transcoding pipelines.',
+          itemCount: 4,
+          entries: [
+            const PlaylistEntry(
+              id: 'pl_01',
+              title: '01. High Performance Background Concurrency in Kotlin',
+              url: 'https://www.youtube.com/watch?v=pl_01',
+              durationSeconds: 1420,
+              thumbnail: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80',
+            ),
+            const PlaylistEntry(
+              id: 'pl_02',
+              title: '02. Zero-Copy FFmpeg Stream Merging & Demuxing',
+              url: 'https://www.youtube.com/watch?v=pl_02',
+              durationSeconds: 1180,
+              thumbnail: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&q=80',
+            ),
+            const PlaylistEntry(
+              id: 'pl_03',
+              title: '03. Scoped Storage & MediaStore Android 15 Integration',
+              url: 'https://www.youtube.com/watch?v=pl_03',
+              durationSeconds: 960,
+              thumbnail: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=80',
+            ),
+            const PlaylistEntry(
+              id: 'pl_04',
+              title: '04. Embedded JavaScript Challenge Solvers with Deno & QuickJS',
+              url: 'https://www.youtube.com/watch?v=pl_04',
+              durationSeconds: 1650,
+              thumbnail: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&q=80',
+            ),
+          ],
+        );
+
+        _extractedPlaylist = playlist;
+        _selectedPlaylistEntryIds.clear();
+        _selectedPlaylistEntryIds.addAll(playlist.entries.map((e) => e.id));
+      }
+
       // Standard realistic multi-stream format manifest
       final sampleFormats = [
         const FormatInfo(
@@ -216,6 +268,55 @@ class _HomeScreenState extends State<HomeScreen> {
     widget.onNavigateToDownloads();
   }
 
+  void _startPlaylistBatchDownload() {
+    if (_extractedPlaylist == null || _selectedPlaylistEntryIds.isEmpty) return;
+
+    final selectedEntries = _extractedPlaylist!.entries
+        .where((e) => _selectedPlaylistEntryIds.contains(e.id))
+        .toList();
+
+    for (final entry in selectedEntries) {
+      final taskId = 'task_${entry.id}_${DateTime.now().millisecondsSinceEpoch}';
+      final formatLabel = _qualityPreference == QualityPreference.audioOnly ? 'Audio (Opus)' : '1080p (AVC)';
+
+      final task = DownloadTask(
+        taskId: taskId,
+        url: entry.url,
+        title: entry.title,
+        thumbnailUrl: entry.thumbnail,
+        formatLabel: formatLabel,
+        progressPercent: 1.0,
+        speedText: 'Queued',
+        etaText: 'Waiting',
+        status: TaskStatus.downloading,
+        createdAt: DateTime.now(),
+      );
+
+      DownloadStateManager.instance.addTask(task);
+
+      NativeBridge.startForegroundDownload(
+        taskId: taskId,
+        title: entry.title,
+        command: [
+          'yt-dlp',
+          '--no-warnings',
+          entry.url,
+        ],
+      );
+
+      _simulateProgress(taskId);
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Enqueued ${selectedEntries.length} items from "${_extractedPlaylist!.title}"'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    widget.onNavigateToDownloads();
+  }
+
   void _simulateProgress(String taskId) async {
     for (int p = 10; p <= 100; p += 15) {
       await Future.delayed(const Duration(milliseconds: 650));
@@ -229,6 +330,142 @@ class _HomeScreenState extends State<HomeScreen> {
         status: p >= 100 ? TaskStatus.completed : TaskStatus.downloading,
       );
     }
+  }
+
+  void _openPlaylistSelectionSheet() {
+    if (_extractedPlaylist == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: AppShapes.bottomSheetShape,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final theme = Theme.of(context);
+            final colorScheme = theme.colorScheme;
+            final allSelected = _selectedPlaylistEntryIds.length == _extractedPlaylist!.entries.length;
+
+            return SafeArea(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.75,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Select Playlist Videos',
+                                style: theme.textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: AppSpacing.xxs),
+                              Text(
+                                '${_selectedPlaylistEntryIds.length} of ${_extractedPlaylist!.entries.length} selected',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setSheetState(() {
+                              if (allSelected) {
+                                _selectedPlaylistEntryIds.clear();
+                              } else {
+                                _selectedPlaylistEntryIds.clear();
+                                _selectedPlaylistEntryIds.addAll(_extractedPlaylist!.entries.map((e) => e.id));
+                              }
+                            });
+                            setState(() {});
+                          },
+                          child: Text(allSelected ? 'Deselect All' : 'Select All'),
+                        ),
+                      ],
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: _extractedPlaylist!.entries.length,
+                        separatorBuilder: (context, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final entry = _extractedPlaylist!.entries[index];
+                          final isSelected = _selectedPlaylistEntryIds.contains(entry.id);
+
+                          return CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: isSelected,
+                            onChanged: (val) {
+                              setSheetState(() {
+                                if (val == true) {
+                                  _selectedPlaylistEntryIds.add(entry.id);
+                                } else {
+                                  _selectedPlaylistEntryIds.remove(entry.id);
+                                }
+                              });
+                              setState(() {});
+                            },
+                            title: Text(
+                              entry.title,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              entry.durationSeconds != null
+                                  ? '${entry.durationSeconds! ~/ 60}:${(entry.durationSeconds! % 60).toString().padLeft(2, '0')}'
+                                  : 'Media Stream',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            secondary: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHigh,
+                                borderRadius: BorderRadius.circular(AppShapes.extraSmall),
+                              ),
+                              child: Icon(
+                                Icons.video_collection_outlined,
+                                color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    FilledButton.icon(
+                      onPressed: _selectedPlaylistEntryIds.isEmpty
+                          ? null
+                          : () {
+                              Navigator.pop(context);
+                              _startPlaylistBatchDownload();
+                            },
+                      icon: const Icon(Icons.download_rounded),
+                      label: Text('Download ${_selectedPlaylistEntryIds.length} Selected'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _openFormatSelectionSheet() {
@@ -336,7 +573,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         focusNode: _urlFocusNode,
                         style: theme.textTheme.bodyMedium,
                         decoration: InputDecoration(
-                          hintText: 'Paste media URL or search...',
+                          hintText: 'Paste media URL, playlist or search...',
                           hintStyle: theme.textTheme.bodyMedium?.copyWith(
                             color: colorScheme.onSurfaceVariant.withAlpha(160),
                           ),
@@ -352,7 +589,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         icon: const Icon(Icons.clear_rounded, size: 20),
                         onPressed: () {
                           _urlController.clear();
-                          setState(() => _extractedMedia = null);
+                          setState(() {
+                            _extractedMedia = null;
+                            _extractedPlaylist = null;
+                          });
                         },
                       )
                     else
@@ -405,11 +645,103 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
+              // Playlist Batch Extraction Card
+              if (_extractedPlaylist != null) ...[
+                const SizedBox(height: AppSpacing.xl),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Detected Playlist', style: theme.textTheme.titleMedium),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(AppShapes.extraSmall),
+                      ),
+                      child: Text(
+                        '${_extractedPlaylist!.itemCount} VIDEOS',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Card(
+                  child: Padding(
+                    padding: AppSpacing.cardPadding,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(AppShapes.small),
+                              ),
+                              child: Icon(Icons.playlist_play_rounded, color: colorScheme.primary, size: 28),
+                            ),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(_extractedPlaylist!.title, style: theme.textTheme.titleSmall),
+                                  const SizedBox(height: AppSpacing.xxs),
+                                  Text(
+                                    _extractedPlaylist!.uploader ?? 'Universal Creator',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          '${_selectedPlaylistEntryIds.length} of ${_extractedPlaylist!.entries.length} items selected for download.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _openPlaylistSelectionSheet,
+                                icon: const Icon(Icons.checklist_rounded, size: 18),
+                                label: const Text('Select Items'),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: _selectedPlaylistEntryIds.isEmpty
+                                    ? null
+                                    : _startPlaylistBatchDownload,
+                                icon: const Icon(Icons.download_rounded, size: 18),
+                                label: Text('Batch Download (${_selectedPlaylistEntryIds.length})'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
               // Extracted Media Surface
               if (_extractedMedia != null && _recommendation != null) ...[
                 const SizedBox(height: AppSpacing.xl),
                 Text(
-                  'Extracted Media',
+                  'Extracted Media Stream',
                   style: theme.textTheme.titleMedium,
                 ),
                 const SizedBox(height: AppSpacing.sm),

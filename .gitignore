@@ -34,7 +34,8 @@ android/app/src/main/assets/binaries/
 .packages
 .pub-cache/
 .pub/
-/build/
+build/
+**/build/
 pubspec.lock
 
 # Staging & Dynamic downloads

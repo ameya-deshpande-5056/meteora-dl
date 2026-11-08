@@ -10,7 +10,7 @@ import 'state/theme_manager.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_scaffold.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Edge to edge immersive dark mode styling
@@ -22,6 +22,8 @@ void main() {
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
+
+  await DownloadStateManager.instance.init();
 
   runApp(const MeteoraDLApp());
 }
