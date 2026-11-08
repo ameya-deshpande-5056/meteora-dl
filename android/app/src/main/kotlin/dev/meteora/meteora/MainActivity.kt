@@ -1,7 +1,11 @@
 package dev.meteora.meteora
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import dev.meteora.meteora.hardware.DeviceCapabilityDetector
 import dev.meteora.meteora.process.SafeProcessExecutor
@@ -21,6 +25,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         const val METHOD_CHANNEL = "dev.meteora/engine"
         const val EVENT_CHANNEL = "dev.meteora/downloads"
+        private const val PERMISSION_REQUEST_CODE = 1002
     }
 
     private var sharedUrl: String? = null
@@ -30,6 +35,7 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
+        checkAndRequestPermissions()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -44,6 +50,47 @@ class MainActivity : FlutterActivity() {
                 sharedUrl = text
             }
         }
+    }
+
+    private fun checkAndRequestPermissions() {
+        val permissionsToRequest = mutableListOf<String>()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.READ_MEDIA_VIDEO)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE)
+        }
+    }
+
+    private fun resolveCommand(rawCommand: List<String>): List<String> {
+        if (rawCommand.isEmpty()) return rawCommand
+        val first = rawCommand.first()
+        if (!first.startsWith("/")) {
+            val candidate = File(filesDir, "packages/active/ytdlp/$first")
+            if (candidate.exists()) {
+                val resolved = rawCommand.toMutableList()
+                resolved[0] = candidate.absolutePath
+                return resolved
+            }
+        }
+        return rawCommand
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -66,6 +113,16 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                "isEngineInstalled" -> {
+                    val candidate = File(filesDir, "packages/active/ytdlp/yt-dlp")
+                    result.success(candidate.exists() && candidate.canExecute())
+                }
+
+                "requestPermissions" -> {
+                    checkAndRequestPermissions()
+                    result.success(true)
+                }
+
                 "getInitialSharedUrl" -> {
                     result.success(sharedUrl)
                     sharedUrl = null
@@ -78,9 +135,23 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
 
+                    val resolvedCommand = resolveCommand(command)
+                    val executableFile = File(resolvedCommand.first())
+                    if (!executableFile.isAbsolute && !File("/system/bin/${resolvedCommand.first()}").exists()) {
+                        val candidate = File(filesDir, "packages/active/ytdlp/yt-dlp")
+                        if (!candidate.exists()) {
+                            result.error(
+                                "ENGINE_NOT_INSTALLED",
+                                "yt-dlp binary is not installed in app storage.",
+                                null
+                            )
+                            return@setMethodCallHandler
+                        }
+                    }
+
                     scope.launch {
                         try {
-                            val execResult = processExecutor.execute(command, filesDir)
+                            val execResult = processExecutor.execute(resolvedCommand, filesDir)
                             if (execResult.exitCode == 0) {
                                 result.success(execResult.output)
                             } else {

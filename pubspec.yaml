@@ -19,6 +19,7 @@ dependencies:
   media_library:
     path: packages/media_library
   sqlite3_flutter_libs: ">=0.5.24 <0.6.0"
+  dynamic_color: 1.7.0
 
 dev_dependencies:
   flutter_test:

@@ -5,7 +5,7 @@ class ThemeManager extends ChangeNotifier {
   static final ThemeManager instance = ThemeManager._internal();
   ThemeManager._internal();
 
-  AppThemeMode _currentMode = AppThemeMode.dark;
+  AppThemeMode _currentMode = AppThemeMode.system;
 
   AppThemeMode get currentMode => _currentMode;
 
@@ -21,8 +21,19 @@ class ThemeManager extends ChangeNotifier {
     }
   }
 
+  ThemeData resolveLightTheme({ColorScheme? dynamicScheme}) {
+    return AppTheme.buildLightTheme(dynamicScheme: dynamicScheme);
+  }
+
+  ThemeData resolveDarkTheme({ColorScheme? dynamicScheme}) {
+    return AppTheme.buildDarkTheme(
+      dynamicScheme: dynamicScheme,
+      amoled: _currentMode == AppThemeMode.amoled,
+    );
+  }
+
   ThemeData get activeDarkTheme {
-    return _currentMode == AppThemeMode.amoled ? AppTheme.amoledTheme : AppTheme.darkTheme;
+    return resolveDarkTheme();
   }
 
   void setThemeMode(AppThemeMode mode) {

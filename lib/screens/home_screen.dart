@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_engine/media_engine.dart';
+import 'package:package_manager/package_manager.dart';
+import 'package:path_provider/path_provider.dart';
 import '../services/native_bridge.dart';
 import '../state/download_state.dart';
 import '../theme/app_shapes.dart';
@@ -24,6 +28,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final FocusNode _urlFocusNode = FocusNode();
 
   bool _isExtracting = false;
+  bool _isInstallingEngine = false;
+  bool _engineInstalled = false;
   String? _errorMessage;
   MediaInfo? _extractedMedia;
   PlaylistInfo? _extractedPlaylist;
@@ -37,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadDeviceCapabilities();
+    _checkEngineStatus();
     _checkInitialSharedUrl();
   }
 
@@ -51,6 +58,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final caps = await NativeBridge.getDeviceCapabilities();
     if (mounted) {
       setState(() => _deviceCapabilities = caps);
+    }
+  }
+
+  Future<void> _checkEngineStatus() async {
+    final installed = await NativeBridge.isEngineInstalled();
+    if (mounted) {
+      setState(() => _engineInstalled = installed);
     }
   }
 
@@ -71,6 +85,74 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<Map<String, dynamic>?> _fetchOEmbedMetadata(String url) async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      final oembedUri = Uri.parse(
+        'https://www.youtube.com/oembed?url=${Uri.encodeComponent(url)}&format=json',
+      );
+      final request = await client.getUrl(oembedUri);
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        return jsonDecode(body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _installEngineNow() async {
+    setState(() {
+      _isInstallingEngine = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final client = GitHubReleaseClient();
+      final release = await client.fetchLatestRelease(
+        packageType: PackageType.ytdlp,
+        targetAbi: 'arm64-v8a',
+        channel: UpdateChannel.stable,
+      );
+
+      if (release != null) {
+        final appDir = await getApplicationDocumentsDirectory();
+        final dirManager = AtomicDirectoryManager(rootPackagesDir: '${appDir.path}/packages');
+        final updateManager = PackageUpdateManager(directoryManager: dirManager);
+
+        final result = await updateManager.installPackage(release: release);
+        if (result.success && mounted) {
+          setState(() {
+            _engineInstalled = true;
+            _isInstallingEngine = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('yt-dlp engine installed successfully! Extracting streams...')),
+          );
+          if (_urlController.text.isNotEmpty) {
+            _extractMedia(_urlController.text);
+          }
+          return;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _isInstallingEngine = false;
+          _errorMessage = 'Could not download yt-dlp release. Check internet connection or configure in Settings.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isInstallingEngine = false;
+          _errorMessage = 'Installation error: $e';
+        });
+      }
+    }
+  }
+
   Future<void> _extractMedia(String rawUrl) async {
     final url = rawUrl.trim();
     if (url.isEmpty) return;
@@ -85,135 +167,89 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final isPlaylist = url.contains('list=') ||
-          url.contains('/playlist') ||
-          url.contains('/sets/') ||
-          url.contains('/album/');
+      await _checkEngineStatus();
 
-      if (isPlaylist) {
-        final playlist = PlaylistInfo(
-          id: 'pl_${DateTime.now().millisecondsSinceEpoch}',
-          title: 'Flutter Systems & Architecture Masterclass',
-          uploader: 'Meteora Engineering Hub',
-          description: 'Deep dive into Android native channels, scoped storage, and media transcoding pipelines.',
-          itemCount: 4,
-          entries: [
-            const PlaylistEntry(
-              id: 'pl_01',
-              title: '01. High Performance Background Concurrency in Kotlin',
-              url: 'https://www.youtube.com/watch?v=pl_01',
-              durationSeconds: 1420,
-              thumbnail: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80',
-            ),
-            const PlaylistEntry(
-              id: 'pl_02',
-              title: '02. Zero-Copy FFmpeg Stream Merging & Demuxing',
-              url: 'https://www.youtube.com/watch?v=pl_02',
-              durationSeconds: 1180,
-              thumbnail: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&q=80',
-            ),
-            const PlaylistEntry(
-              id: 'pl_03',
-              title: '03. Scoped Storage & MediaStore Android 15 Integration',
-              url: 'https://www.youtube.com/watch?v=pl_03',
-              durationSeconds: 960,
-              thumbnail: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=80',
-            ),
-            const PlaylistEntry(
-              id: 'pl_04',
-              title: '04. Embedded JavaScript Challenge Solvers with Deno & QuickJS',
-              url: 'https://www.youtube.com/watch?v=pl_04',
-              durationSeconds: 1650,
-              thumbnail: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&q=80',
-            ),
-          ],
-        );
+      // Attempt real native extraction if engine is present
+      if (_engineInstalled) {
+        final command = [
+          'yt-dlp',
+          '--dump-single-json',
+          '--no-warnings',
+          '--no-call-home',
+          '--skip-download',
+          '--',
+          url,
+        ];
 
-        _extractedPlaylist = playlist;
-        _selectedPlaylistEntryIds.clear();
-        _selectedPlaylistEntryIds.addAll(playlist.entries.map((e) => e.id));
+        final rawJson = await NativeBridge.executeExtraction(command);
+        if (rawJson != null && rawJson.trim().isNotEmpty) {
+          final Map<String, dynamic> json = jsonDecode(rawJson);
+
+          if (json['_type'] == 'playlist') {
+            final playlist = PlaylistInfo.fromJson(json);
+            if (mounted) {
+              setState(() {
+                _extractedPlaylist = playlist;
+                _selectedPlaylistEntryIds.clear();
+                _selectedPlaylistEntryIds.addAll(playlist.entries.map((e) => e.id));
+                _isExtracting = false;
+              });
+            }
+            return;
+          }
+
+          final media = MediaInfo.fromJson(json);
+          final selector = IntelligentFormatSelector(preference: _qualityPreference);
+          final rec = selector.recommendFormat(media: media, device: _deviceCapabilities);
+
+          if (mounted) {
+            setState(() {
+              _extractedMedia = media;
+              _recommendation = rec;
+              _selectedFormat = rec.videoFormat ?? (media.formats.isNotEmpty ? media.formats.first : null);
+              _isExtracting = false;
+            });
+          }
+          return;
+        }
       }
 
-      // Standard realistic multi-stream format manifest
-      final sampleFormats = [
-        const FormatInfo(
-          formatId: '1080p_av1',
-          formatNote: '1080p60 HDR',
-          ext: 'mp4',
-          height: 1080,
-          fps: 60,
-          vcodec: 'av01.0.08M.08',
-          filesize: 88 * 1024 * 1024,
-          streamType: StreamType.videoOnly,
-        ),
-        const FormatInfo(
-          formatId: '1080p_vp9',
-          formatNote: '1080p60',
-          ext: 'webm',
-          height: 1080,
-          fps: 60,
-          vcodec: 'vp9',
-          filesize: 96 * 1024 * 1024,
-          streamType: StreamType.videoOnly,
-        ),
-        const FormatInfo(
-          formatId: '720p_avc',
-          formatNote: '720p30',
-          ext: 'mp4',
-          height: 720,
-          fps: 30,
-          vcodec: 'avc1.64001f',
-          filesize: 44 * 1024 * 1024,
-          streamType: StreamType.videoOnly,
-        ),
-        const FormatInfo(
-          formatId: 'audio_opus',
-          formatNote: '160kbps High',
-          ext: 'opus',
-          acodec: 'opus',
-          abr: 160,
-          filesize: 6 * 1024 * 1024,
-          streamType: StreamType.audioOnly,
-        ),
-        const FormatInfo(
-          formatId: 'audio_m4a',
-          formatNote: '128kbps AAC',
-          ext: 'm4a',
-          acodec: 'mp4a.40.2',
-          abr: 128,
-          filesize: 5 * 1024 * 1024,
-          streamType: StreamType.audioOnly,
-        ),
-      ];
+      // If engine is not installed, query oEmbed for real title, author, and thumbnail of the actual pasted URL
+      final oembed = await _fetchOEmbedMetadata(url);
+      if (oembed != null) {
+        final title = (oembed['title'] ?? 'Online Media Stream').toString();
+        final author = (oembed['author_name'] ?? 'Web Publisher').toString();
+        final thumb = (oembed['thumbnail_url'] ?? '').toString();
 
-      final sampleMedia = MediaInfo(
-        id: 'sample_${DateTime.now().millisecondsSinceEpoch}',
-        title: url.contains('youtu')
-            ? 'Exploring Deep Space & High Performance Systems'
-            : 'Extracted Media Stream (${Uri.tryParse(url)?.host ?? "Web Stream"})',
-        uploader: 'Meteora Creator Network',
-        durationSeconds: 345,
-        thumbnail: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80',
-        webpageUrl: url,
-        extractor: 'Universal',
-        formats: sampleFormats,
-      );
+        final fallbackMedia = MediaInfo(
+          id: 'web_${DateTime.now().millisecondsSinceEpoch}',
+          title: title,
+          uploader: author,
+          thumbnail: thumb.isNotEmpty ? thumb : null,
+          webpageUrl: url,
+          formats: const [],
+        );
 
-      final selector = IntelligentFormatSelector(preference: _qualityPreference);
-      final rec = selector.recommendFormat(media: sampleMedia, device: _deviceCapabilities);
+        if (mounted) {
+          setState(() {
+            _extractedMedia = fallbackMedia;
+            _engineInstalled = false;
+            _isExtracting = false;
+          });
+        }
+        return;
+      }
 
       if (mounted) {
         setState(() {
-          _extractedMedia = sampleMedia;
-          _recommendation = rec;
-          _selectedFormat = rec.videoFormat ?? sampleMedia.formats.first;
           _isExtracting = false;
+          _errorMessage = 'Could not extract media info for "$url". Verify the URL or install the yt-dlp engine.';
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = e.toString().replaceFirst('Exception: ', '');
           _isExtracting = false;
         });
       }
@@ -224,17 +260,19 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_qualityPreference == pref || _extractedMedia == null) return;
     setState(() {
       _qualityPreference = pref;
-      final selector = IntelligentFormatSelector(preference: pref);
-      _recommendation = selector.recommendFormat(media: _extractedMedia!, device: _deviceCapabilities);
-      _selectedFormat = _recommendation?.videoFormat ?? _extractedMedia!.formats.first;
+      if (_extractedMedia!.formats.isNotEmpty) {
+        final selector = IntelligentFormatSelector(preference: pref);
+        _recommendation = selector.recommendFormat(media: _extractedMedia!, device: _deviceCapabilities);
+        _selectedFormat = _recommendation?.videoFormat ?? _extractedMedia!.formats.first;
+      }
     });
   }
 
   void _startDownload() {
-    if (_extractedMedia == null || _recommendation == null) return;
+    if (_extractedMedia == null) return;
 
     final taskId = 'task_${DateTime.now().millisecondsSinceEpoch}';
-    final formatLabel = _selectedFormat?.resolutionLabel ?? _recommendation!.reasoning;
+    final formatLabel = _selectedFormat?.resolutionLabel ?? _recommendation?.reasoning ?? 'Default Stream';
 
     final task = DownloadTask(
       taskId: taskId,
@@ -242,29 +280,29 @@ class _HomeScreenState extends State<HomeScreen> {
       title: _extractedMedia!.title,
       thumbnailUrl: _extractedMedia!.thumbnail,
       formatLabel: formatLabel,
-      progressPercent: 1.0,
+      progressPercent: 0.0,
       speedText: 'Connecting...',
-      etaText: 'Estimating...',
+      etaText: 'Starting...',
       status: TaskStatus.downloading,
       createdAt: DateTime.now(),
     );
 
     DownloadStateManager.instance.addTask(task);
 
-    // Launch safe background download
+    // Launch real native background download
     NativeBridge.startForegroundDownload(
       taskId: taskId,
       title: task.title,
       command: [
         'yt-dlp',
         '--no-warnings',
-        '-f', _recommendation!.ytdlpFormatSelector,
+        if (_recommendation != null) ...[
+          '-f', _recommendation!.ytdlpFormatSelector,
+        ],
         _urlController.text.trim(),
       ],
     );
 
-    // Responsive progress feedback
-    _simulateProgress(taskId);
     widget.onNavigateToDownloads();
   }
 
@@ -277,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     for (final entry in selectedEntries) {
       final taskId = 'task_${entry.id}_${DateTime.now().millisecondsSinceEpoch}';
-      final formatLabel = _qualityPreference == QualityPreference.audioOnly ? 'Audio (Opus)' : '1080p (AVC)';
+      final formatLabel = _qualityPreference == QualityPreference.audioOnly ? 'Audio' : 'Optimal Video';
 
       final task = DownloadTask(
         taskId: taskId,
@@ -285,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: entry.title,
         thumbnailUrl: entry.thumbnail,
         formatLabel: formatLabel,
-        progressPercent: 1.0,
+        progressPercent: 0.0,
         speedText: 'Queued',
         etaText: 'Waiting',
         status: TaskStatus.downloading,
@@ -303,8 +341,6 @@ class _HomeScreenState extends State<HomeScreen> {
           entry.url,
         ],
       );
-
-      _simulateProgress(taskId);
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -315,21 +351,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     widget.onNavigateToDownloads();
-  }
-
-  void _simulateProgress(String taskId) async {
-    for (int p = 10; p <= 100; p += 15) {
-      await Future.delayed(const Duration(milliseconds: 650));
-      if (!mounted) return;
-      DownloadStateManager.instance.updateProgress(
-        taskId: taskId,
-        percent: p.toDouble(),
-        speed: '${(5.2 + (p % 3) * 0.4).toStringAsFixed(1)} MB/s',
-        eta: '00:${((100 - p) ~/ 8).toString().padLeft(2, '0')}',
-        totalSize: '94.2 MB',
-        status: p >= 100 ? TaskStatus.completed : TaskStatus.downloading,
-      );
-    }
   }
 
   void _openPlaylistSelectionSheet() {
@@ -469,7 +490,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openFormatSelectionSheet() {
-    if (_extractedMedia == null) return;
+    if (_extractedMedia == null || _extractedMedia!.formats.isEmpty) return;
 
     showModalBottomSheet(
       context: context,
@@ -645,6 +666,56 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
+              // Engine Installation Banner (shown if local binary is missing)
+              if (!_engineInstalled) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Container(
+                  padding: AppSpacing.cardPadding,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(AppShapes.medium),
+                    border: Border.all(color: colorScheme.outlineVariant.withAlpha(120)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.hardware_rounded, color: colorScheme.primary, size: 22),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              'yt-dlp Extractor Engine Required',
+                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'MeteoraDL downloads directly on-device using yt-dlp. Install the official ARM64 binary into app storage to enable multi-stream format extraction and merging.',
+                        style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: _isInstallingEngine ? null : _installEngineNow,
+                          icon: _isInstallingEngine
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.download_rounded, size: 18),
+                          label: Text(_isInstallingEngine ? 'Installing yt-dlp engine...' : 'Install Extractor Engine'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               // Playlist Batch Extraction Card
               if (_extractedPlaylist != null) ...[
                 const SizedBox(height: AppSpacing.xl),
@@ -738,7 +809,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
 
               // Extracted Media Surface
-              if (_extractedMedia != null && _recommendation != null) ...[
+              if (_extractedMedia != null) ...[
                 const SizedBox(height: AppSpacing.xl),
                 Text(
                   'Extracted Media Stream',
@@ -761,33 +832,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                 width: 90,
                                 height: 60,
                                 color: colorScheme.surfaceContainerHighest,
-                                child: Stack(
-                                  alignment: Alignment.bottomRight,
-                                  children: [
-                                    Center(
-                                      child: Icon(
-                                        Icons.movie_outlined,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                      margin: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withAlpha(180),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: const Text(
-                                        '05:45',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
+                                child: _extractedMedia!.thumbnail != null && _extractedMedia!.thumbnail!.isNotEmpty
+                                    ? Image.network(
+                                        _extractedMedia!.thumbnail!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, _, __) => Center(
+                                          child: Icon(Icons.movie_outlined, color: colorScheme.onSurfaceVariant),
                                         ),
+                                      )
+                                    : Center(
+                                        child: Icon(Icons.movie_outlined, color: colorScheme.onSurfaceVariant),
                                       ),
-                                    ),
-                                  ],
-                                ),
                               ),
                             ),
                             const SizedBox(width: AppSpacing.md),
@@ -803,7 +858,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   const SizedBox(height: AppSpacing.xxs),
                                   Text(
-                                    _extractedMedia!.uploader ?? 'Universal Creator',
+                                    _extractedMedia!.uploader ?? 'Web Publisher',
                                     style: theme.textTheme.bodySmall,
                                   ),
                                 ],
@@ -811,69 +866,73 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: AppSpacing.lg),
 
-                        // Quality Mode SegmentedButton
-                        SizedBox(
-                          width: double.infinity,
-                          child: SegmentedButton<QualityPreference>(
-                            segments: const [
-                              ButtonSegment(
-                                value: QualityPreference.auto,
-                                label: Text('Optimal'),
-                                icon: Icon(Icons.auto_awesome, size: 16),
-                              ),
-                              ButtonSegment(
-                                value: QualityPreference.maximumQuality,
-                                label: Text('Maximum'),
-                              ),
-                              ButtonSegment(
-                                value: QualityPreference.audioOnly,
-                                label: Text('Audio'),
-                              ),
-                            ],
-                            selected: {_qualityPreference},
-                            onSelectionChanged: (set) => _onPreferenceChanged(set.first),
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
+                        if (_extractedMedia!.formats.isNotEmpty && _recommendation != null) ...[
+                          const SizedBox(height: AppSpacing.lg),
 
-                        // Intelligent Recommendation Details
-                        Container(
-                          padding: AppSpacing.compactCardPadding,
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHigh,
-                            borderRadius: BorderRadius.circular(AppShapes.small),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.info_outline_rounded, color: colorScheme.primary, size: 20),
-                              const SizedBox(width: AppSpacing.md),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _recommendation!.reasoning,
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: AppSpacing.xxs),
-                                    Text(
-                                      'Target: ${_recommendation!.targetExtension.toUpperCase()} • Direct Stream Copy: ${_recommendation!.directStreamCopyPossible ? "Yes" : "Mux required"}',
-                                      style: theme.textTheme.bodySmall,
-                                    ),
-                                  ],
+                          // Quality Mode SegmentedButton
+                          SizedBox(
+                            width: double.infinity,
+                            child: SegmentedButton<QualityPreference>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: QualityPreference.auto,
+                                  label: Text('Optimal'),
+                                  icon: Icon(Icons.auto_awesome, size: 16),
                                 ),
-                              ),
-                              TextButton(
-                                onPressed: _openFormatSelectionSheet,
-                                child: const Text('Change'),
-                              ),
-                            ],
+                                ButtonSegment(
+                                  value: QualityPreference.maximumQuality,
+                                  label: Text('Maximum'),
+                                ),
+                                ButtonSegment(
+                                  value: QualityPreference.audioOnly,
+                                  label: Text('Audio'),
+                                ),
+                              ],
+                              selected: {_qualityPreference},
+                              onSelectionChanged: (set) => _onPreferenceChanged(set.first),
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: AppSpacing.md),
+
+                          // Intelligent Recommendation Details
+                          Container(
+                            padding: AppSpacing.compactCardPadding,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(AppShapes.small),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline_rounded, color: colorScheme.primary, size: 20),
+                                const SizedBox(width: AppSpacing.md),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _recommendation!.reasoning,
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: AppSpacing.xxs),
+                                      Text(
+                                        'Target: ${_recommendation!.targetExtension.toUpperCase()} • Direct Stream Copy: ${_recommendation!.directStreamCopyPossible ? "Yes" : "Mux required"}',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _openFormatSelectionSheet,
+                                  child: const Text('Change'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+
                         const SizedBox(height: AppSpacing.lg),
 
                         // Primary Download Button

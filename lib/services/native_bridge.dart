@@ -42,6 +42,21 @@ class NativeBridge {
     return DeviceCapabilities.standardAndroidArm64();
   }
 
+  static Future<bool> isEngineInstalled() async {
+    try {
+      final res = await _methodChannel.invokeMethod<bool>('isEngineInstalled');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> requestPermissions() async {
+    try {
+      await _methodChannel.invokeMethod('requestPermissions');
+    } catch (_) {}
+  }
+
   static Future<String?> getInitialSharedUrl() async {
     try {
       return await _methodChannel.invokeMethod<String>('getInitialSharedUrl');

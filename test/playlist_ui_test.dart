@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_library/media_library.dart';
 import 'package:meteora/screens/home_screen.dart';
@@ -6,6 +8,44 @@ import 'package:meteora/state/download_state.dart';
 
 void main() {
   testWidgets('HomeScreen detects playlist URL and presents batch controls', (WidgetTester tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('dev.meteora/engine'),
+      (call) async {
+        if (call.method == 'isEngineInstalled') return true;
+        if (call.method == 'executeExtraction') {
+          return jsonEncode({
+            '_type': 'playlist',
+            'id': 'PL1234567890',
+            'title': 'Flutter Systems & Architecture Masterclass',
+            'uploader': 'Meteora Engineering Hub',
+            'entries': [
+              {
+                'id': 'pl_01',
+                'title': '01. High Performance Background Concurrency in Kotlin',
+                'duration': 1420,
+              },
+              {
+                'id': 'pl_02',
+                'title': '02. Zero-Copy FFmpeg Stream Merging & Demuxing',
+                'duration': 1180,
+              },
+              {
+                'id': 'pl_03',
+                'title': '03. Scoped Storage & MediaStore Android 15 Integration',
+                'duration': 960,
+              },
+              {
+                'id': 'pl_04',
+                'title': '04. Embedded JavaScript Challenge Solvers with Deno & QuickJS',
+                'duration': 1650,
+              },
+            ],
+          });
+        }
+        return null;
+      },
+    );
+
     await DownloadStateManager.instance.init(db: MeteoraDatabase.openInMemory());
 
     await tester.pumpWidget(

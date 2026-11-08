@@ -1,3 +1,4 @@
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/downloads_screen.dart';
@@ -7,7 +8,6 @@ import 'screens/settings_screen.dart';
 import 'services/native_bridge.dart';
 import 'state/download_state.dart';
 import 'state/theme_manager.dart';
-import 'theme/app_theme.dart';
 import 'widgets/adaptive_scaffold.dart';
 
 void main() async {
@@ -24,6 +24,7 @@ void main() async {
   );
 
   await DownloadStateManager.instance.init();
+  NativeBridge.requestPermissions();
 
   runApp(const MeteoraDLApp());
 }
@@ -33,16 +34,20 @@ class MeteoraDLApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: ThemeManager.instance,
-      builder: (context, _) {
-        return MaterialApp(
-          title: 'MeteoraDL',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: ThemeManager.instance.activeDarkTheme,
-          themeMode: ThemeManager.instance.flutterThemeMode,
-          home: const MainNavigationScreen(),
+    return DynamicColorBuilder(
+      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        return ListenableBuilder(
+          listenable: ThemeManager.instance,
+          builder: (context, _) {
+            return MaterialApp(
+              title: 'MeteoraDL',
+              debugShowCheckedModeBanner: false,
+              theme: ThemeManager.instance.resolveLightTheme(dynamicScheme: lightDynamic),
+              darkTheme: ThemeManager.instance.resolveDarkTheme(dynamicScheme: darkDynamic),
+              themeMode: ThemeManager.instance.flutterThemeMode,
+              home: const MainNavigationScreen(),
+            );
+          },
         );
       },
     );
