@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../models/package_release.dart';
 import '../models/package_type.dart';
-import '../models/update_channel.dart';
 import '../security/checksum_verifier.dart';
 import '../staging/atomic_directory_manager.dart';
 

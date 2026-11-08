@@ -1,5 +1,3 @@
-library media_engine;
-
 export 'models/stream_type.dart';
 export 'models/format_info.dart';
 export 'models/media_info.dart';

@@ -42,7 +42,7 @@ class FormatInfo {
   String get resolutionLabel {
     if (height != null) {
       final fpsSuffix = (fps != null && fps! > 30) ? 'p${fps!.round()}' : 'p';
-      return '${height}$fpsSuffix';
+      return '$height$fpsSuffix';
     }
     if (streamType == StreamType.audioOnly) {
       if (abr != null) return '${abr!.round()} kbps';

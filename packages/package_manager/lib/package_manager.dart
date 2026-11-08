@@ -1,5 +1,3 @@
-library package_manager;
-
 export 'models/package_type.dart';
 export 'models/update_channel.dart';
 export 'models/package_release.dart';

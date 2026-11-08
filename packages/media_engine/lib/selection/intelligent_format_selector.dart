@@ -3,7 +3,6 @@ import '../models/device_capabilities.dart';
 import '../models/format_info.dart';
 import '../models/format_recommendation.dart';
 import '../models/media_info.dart';
-import '../models/stream_type.dart';
 
 enum QualityPreference {
   auto,

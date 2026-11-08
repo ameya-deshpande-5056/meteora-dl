@@ -5,7 +5,6 @@ void main() {
   group('IntelligentFormatSelector', () {
     late DeviceCapabilities standardDevice;
     late DeviceCapabilities meteredDevice;
-    late DeviceCapabilities lowStorageDevice;
 
     setUp(() {
       standardDevice = DeviceCapabilities.standardAndroidArm64(
@@ -16,11 +15,6 @@ void main() {
       meteredDevice = DeviceCapabilities.standardAndroidArm64(
         freeStorageBytes: 50 * 1024 * 1024 * 1024,
         isMeteredNetwork: true,
-      );
-
-      lowStorageDevice = DeviceCapabilities.standardAndroidArm64(
-        freeStorageBytes: 200 * 1024 * 1024, // 200 MB
-        isMeteredNetwork: false,
       );
     });
 
