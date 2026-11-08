@@ -1,0 +1,15 @@
+name: package_manager
+description: Independent Package Update Manager for Meteora (yt-dlp, deno, quickjs, ffmpeg).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  meta: ^1.15.0
+  crypto: ^3.0.3
+  http: ^1.2.0
+
+dev_dependencies:
+  test: ^1.25.0
