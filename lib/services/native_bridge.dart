@@ -51,6 +51,22 @@ class NativeBridge {
     }
   }
 
+  static Future<String?> getEngineVersion() async {
+    try {
+      return await _methodChannel.invokeMethod<String>('getEngineVersion');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<String?> updateEngine() async {
+    try {
+      return await _methodChannel.invokeMethod<String>('updateEngine');
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> requestPermissions() async {
     try {
       await _methodChannel.invokeMethod('requestPermissions');

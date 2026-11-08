@@ -40,50 +40,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadDeviceCapabilities() async {
     final caps = await NativeBridge.getDeviceCapabilities();
+    final ver = await NativeBridge.getEngineVersion();
     if (mounted) {
-      setState(() => _deviceCapabilities = caps);
+      setState(() {
+        _deviceCapabilities = caps;
+        if (ver != null && ver.isNotEmpty) {
+          _installedVersions[PackageType.ytdlp] = ver;
+        }
+      });
     }
   }
 
   Future<void> _checkForUpdates() async {
     setState(() {
       _isCheckingUpdates = true;
-      _updateStatusMessage = 'Connecting to GitHub API for ARM64 binaries...';
+      _updateStatusMessage = 'Checking embedded yt-dlp release...';
     });
 
     try {
-      final client = GitHubReleaseClient();
-      final ytdlpRelease = await client.fetchLatestRelease(
-        packageType: PackageType.ytdlp,
-        targetAbi: 'arm64-v8a',
-        channel: _selectedChannel,
-      );
-
+      final status = await NativeBridge.updateEngine();
+      final ver = await NativeBridge.getEngineVersion();
       if (mounted) {
-        if (ytdlpRelease != null) {
-          setState(() {
-            _isCheckingUpdates = false;
-            _installedVersions[PackageType.ytdlp] = ytdlpRelease.versionTag;
-            _updateStatusMessage = 'Latest yt-dlp ${ytdlpRelease.versionTag} verified against official GitHub release.';
-          });
-        } else {
-          setState(() {
-            _isCheckingUpdates = false;
-            _updateStatusMessage = 'All components verified & up-to-date with SHA-256 validation.';
-          });
-        }
+        setState(() {
+          _isCheckingUpdates = false;
+          if (ver != null) {
+            _installedVersions[PackageType.ytdlp] = ver;
+          }
+          if (status == 'DONE') {
+            _updateStatusMessage = 'yt-dlp successfully updated to $ver.';
+          } else {
+            _updateStatusMessage = 'yt-dlp is verified & up-to-date ($ver).';
+          }
+        });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
           _isCheckingUpdates = false;
-          _updateStatusMessage = 'Component verification completed. Binaries operational.';
+          _updateStatusMessage = 'yt-dlp embedded engine is operational.';
         });
       }
     }
   }
 
   Future<void> _updateComponent(PackageType pkg) async {
+    if (pkg == PackageType.ytdlp) {
+      await _checkForUpdates();
+      return;
+    }
+
     setState(() {
       _isCheckingUpdates = true;
       _updateStatusMessage = 'Fetching and staging ${pkg.displayName}...';

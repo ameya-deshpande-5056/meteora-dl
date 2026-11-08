@@ -211,7 +211,6 @@ class _HomeScreenState extends State<HomeScreen> {
           '--no-warnings',
           '--no-call-home',
           '--skip-download',
-          '--',
           url,
         ];
 

@@ -8,11 +8,15 @@ import android.content.Context
 import android.content.Intent
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Environment
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
 import dev.meteora.meteora.MainActivity
+import dev.meteora.meteora.engine.NativeEngineManager
 import dev.meteora.meteora.process.SafeProcessExecutor
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -100,54 +104,41 @@ class DownloadForegroundService : Service() {
             try {
                 emitEvent(taskId, "downloading", 0.0, "0 B/s", "Starting...")
 
-                val resolvedCommand = resolveCommand(rawCommand)
-                val executableFile = File(resolvedCommand.first())
-
-                // Check if the binary is accessible or if we need to notify the user
-                if (!executableFile.isAbsolute && !File("/system/bin/${resolvedCommand.first()}").exists()) {
-                    val candidate = File(filesDir, "packages/active/ytdlp/yt-dlp")
-                    if (!candidate.exists()) {
-                        val errMsg = "Component '${resolvedCommand.first()}' is not installed yet. Please update it in Settings."
-                        emitEvent(taskId, "error", 0.0, "0 B/s", errMsg)
-                        updateNotification(title, "Engine not installed", 0)
-                        activeTasks.remove(taskId)
-                        if (activeTasks.isEmpty()) {
-                            stopForeground(STOP_FOREGROUND_REMOVE)
-                            stopSelf()
-                        }
-                        return@launch
-                    }
+                if (!NativeEngineManager.isReady()) {
+                    NativeEngineManager.init(applicationContext)
                 }
 
-                val progressRegex = Regex("""\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+)(\w+)\s+at\s+([\d.]+)(\w+/s)\s+ETA\s+([\d:]+)""")
-
-                val result = processExecutor.execute(
-                    command = resolvedCommand,
-                    workingDir = filesDir,
-                    onLineOutput = { line ->
-                        val match = progressRegex.find(line)
-                        if (match != null) {
-                            val percent = match.groupValues[1].toDoubleOrNull() ?: 0.0
-                            val totalSize = "${match.groupValues[2]} ${match.groupValues[3]}"
-                            val speed = "${match.groupValues[4]} ${match.groupValues[5]}"
-                            val eta = match.groupValues[6]
-
-                            updateNotification(title, "$speed • ETA $eta", percent.toInt())
-                            emitEvent(taskId, "downloading", percent, speed, eta, totalSize)
-                        }
-                    }
+                val downloadDir = File(
+                    applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                    "Meteora"
                 )
-
-                if (result.isCancelled) {
-                    emitEvent(taskId, "cancelled", 0.0, "0 B/s", "")
-                } else if (result.exitCode == 0) {
-                    emitEvent(taskId, "completed", 100.0, "0 B/s", "Done")
-                    updateNotification(title, "Download complete", 100)
-                } else {
-                    val message = result.errorMessage ?: "Failed with exit code ${result.exitCode}"
-                    emitEvent(taskId, "error", 0.0, "0 B/s", message)
-                    updateNotification(title, "Download error", 0)
+                if (!downloadDir.exists()) {
+                    downloadDir.mkdirs()
                 }
+
+                val args = if (rawCommand.firstOrNull() == "yt-dlp") rawCommand.drop(1) else rawCommand
+                val request = YoutubeDLRequest(emptyList())
+                request.addCommands(args)
+
+                // If output path is not provided in command, default to app storage downloadDir
+                if (!request.hasOption("-o") && !request.hasOption("--output")) {
+                    request.addOption("-o", "${downloadDir.absolutePath}/%(title)s [%(id)s].%(ext)s")
+                }
+
+                val speedRegex = Regex("""(\d+(\.\d+)?\s*(K|M|G)?i?B/s)""")
+
+                NativeEngineManager.execute(request, processId = taskId) { progress, etaInSeconds, line ->
+                    val speedMatch = speedRegex.find(line)
+                    val speed = speedMatch?.value ?: ""
+                    val etaStr = if (etaInSeconds > 0) "${etaInSeconds}s" else ""
+                    updateNotification(title, if (speed.isNotEmpty()) "$speed • ETA $etaStr" else "Downloading...", progress.toInt())
+                    emitEvent(taskId, "downloading", progress.toDouble(), speed, etaStr)
+                }
+
+                emitEvent(taskId, "completed", 100.0, "0 B/s", "Done")
+                updateNotification(title, "Download complete", 100)
+            } catch (e: YoutubeDL.CanceledException) {
+                emitEvent(taskId, "cancelled", 0.0, "0 B/s", "")
             } catch (e: Throwable) {
                 Log.e(TAG, "Exception during download task execution", e)
                 emitEvent(taskId, "error", 0.0, "0 B/s", e.localizedMessage ?: "Unknown error")
@@ -165,6 +156,7 @@ class DownloadForegroundService : Service() {
     }
 
     private fun cancelTask(taskId: String) {
+        NativeEngineManager.cancel(taskId)
         activeTasks[taskId]?.cancel()
         activeTasks.remove(taskId)
         emitEvent(taskId, "cancelled", 0.0, "0 B/s", "")

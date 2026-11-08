@@ -7,6 +7,8 @@ import android.os.Build
 import android.os.Bundle
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.yausername.youtubedl_android.YoutubeDLRequest
+import dev.meteora.meteora.engine.NativeEngineManager
 import dev.meteora.meteora.hardware.DeviceCapabilityDetector
 import dev.meteora.meteora.process.SafeProcessExecutor
 import dev.meteora.meteora.service.DownloadForegroundService
@@ -36,6 +38,9 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
         checkAndRequestPermissions()
+        scope.launch {
+            NativeEngineManager.init(applicationContext)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -114,8 +119,27 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "isEngineInstalled" -> {
-                    val candidate = File(filesDir, "packages/active/ytdlp/yt-dlp")
-                    result.success(candidate.exists() && candidate.canExecute())
+                    scope.launch {
+                        if (!NativeEngineManager.isReady()) {
+                            NativeEngineManager.init(applicationContext)
+                        }
+                        result.success(NativeEngineManager.isReady())
+                    }
+                }
+
+                "getEngineVersion" -> {
+                    result.success(NativeEngineManager.getVersion(applicationContext))
+                }
+
+                "updateEngine" -> {
+                    scope.launch {
+                        try {
+                            val status = NativeEngineManager.update(applicationContext)
+                            result.success(status)
+                        } catch (e: Throwable) {
+                            result.error("UPDATE_ERROR", e.localizedMessage ?: "Update failed", null)
+                        }
+                    }
                 }
 
                 "requestPermissions" -> {
@@ -135,31 +159,24 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
 
-                    val resolvedCommand = resolveCommand(command)
-                    val executableFile = File(resolvedCommand.first())
-                    if (!executableFile.isAbsolute && !File("/system/bin/${resolvedCommand.first()}").exists()) {
-                        val candidate = File(filesDir, "packages/active/ytdlp/yt-dlp")
-                        if (!candidate.exists()) {
-                            result.error(
-                                "ENGINE_NOT_INSTALLED",
-                                "yt-dlp binary is not installed in app storage.",
-                                null
-                            )
-                            return@setMethodCallHandler
-                        }
-                    }
-
                     scope.launch {
                         try {
-                            val execResult = processExecutor.execute(resolvedCommand, filesDir)
-                            if (execResult.exitCode == 0) {
-                                result.success(execResult.output)
-                            } else {
-                                val err = execResult.errorMessage ?: "Exit code ${execResult.exitCode}: ${execResult.output}"
-                                result.error("EXTRACTION_FAILED", err, null)
+                            if (!NativeEngineManager.isReady()) {
+                                val ok = NativeEngineManager.init(applicationContext)
+                                if (!ok) {
+                                    result.error("INIT_FAILED", "Failed to initialize embedded yt-dlp engine", null)
+                                    return@launch
+                                }
                             }
+
+                            val args = if (command.first() == "yt-dlp") command.drop(1) else command
+                            val request = YoutubeDLRequest(emptyList())
+                            request.addCommands(args)
+
+                            val response = NativeEngineManager.execute(request)
+                            result.success(response.out)
                         } catch (e: Throwable) {
-                            result.error("EXECUTION_ERROR", e.localizedMessage ?: "Unknown error", null)
+                            result.error("EXTRACTION_FAILED", e.localizedMessage ?: "Unknown error", null)
                         }
                     }
                 }
