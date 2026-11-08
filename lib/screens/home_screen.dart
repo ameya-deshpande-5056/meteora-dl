@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:media_engine/media_engine.dart';
 import 'package:package_manager/package_manager.dart';
 import 'package:path_provider/path_provider.dart';
-import '../services/direct_media_engine.dart';
 import '../services/native_bridge.dart';
 import '../state/download_state.dart';
 import '../theme/app_shapes.dart';
@@ -24,7 +23,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final TextEditingController _urlController = TextEditingController();
   final FocusNode _urlFocusNode = FocusNode();
 
@@ -39,10 +38,12 @@ class _HomeScreenState extends State<HomeScreen> {
   FormatInfo? _selectedFormat;
   DeviceCapabilities _deviceCapabilities = DeviceCapabilities.standardAndroidArm64();
   QualityPreference _qualityPreference = QualityPreference.auto;
+  String? _lastDetectedClipboardUrl;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadDeviceCapabilities();
     _checkEngineStatus();
     _checkInitialSharedUrl();
@@ -50,9 +51,50 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _urlController.dispose();
     _urlFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkInitialSharedUrl();
+      _checkClipboardOnResume();
+    }
+  }
+
+  Future<void> _checkClipboardOnResume() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text?.trim();
+      if (text != null &&
+          (text.startsWith('http://') || text.startsWith('https://')) &&
+          text != _lastDetectedClipboardUrl &&
+          text != _urlController.text) {
+        _lastDetectedClipboardUrl = text;
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Link detected on clipboard: ${text.length > 35 ? "${text.substring(0, 35)}..." : text}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Inspect',
+              onPressed: () {
+                _urlController.text = text;
+                _extractMedia(text);
+              },
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadDeviceCapabilities() async {
@@ -168,83 +210,47 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      // 1. Direct Media Extraction Engine (Fast, native Dart stream resolution)
-      if (DirectMediaEngine.instance.isSupported(url)) {
-        try {
-          if (url.contains('list=') || url.contains('/playlist')) {
-            final playlist = await DirectMediaEngine.instance.extractPlaylist(url);
-            if (playlist != null && playlist.entries.isNotEmpty && mounted) {
-              setState(() {
-                _extractedPlaylist = playlist;
-                _selectedPlaylistEntryIds.clear();
-                _selectedPlaylistEntryIds.addAll(playlist.entries.map((e) => e.id));
-                _isExtracting = false;
-              });
-              return;
-            }
-          }
-
-          final media = await DirectMediaEngine.instance.extractVideo(url);
-          if (media != null && mounted) {
-            final selector = IntelligentFormatSelector(preference: _qualityPreference);
-            final rec = selector.recommendFormat(media: media, device: _deviceCapabilities);
-
-            setState(() {
-              _extractedMedia = media;
-              _recommendation = rec;
-              _selectedFormat = rec.videoFormat ?? (media.formats.isNotEmpty ? media.formats.first : null);
-              _isExtracting = false;
-            });
-            return;
-          }
-        } catch (_) {
-          // Network unavailable or in widget test: fall through to native process engine / mock channel
-        }
-      }
-
-      // 2. Native Process-Based yt-dlp Extraction
+      // Native yt-dlp Extraction (Powered by embedded Python & FFmpeg)
       await _checkEngineStatus();
-      if (_engineInstalled) {
-        final command = [
-          'yt-dlp',
-          '--dump-single-json',
-          '--no-warnings',
-          '--no-call-home',
-          '--skip-download',
-          url,
-        ];
+      final command = [
+        'yt-dlp',
+        '--dump-single-json',
+        '--no-warnings',
+        '--no-call-home',
+        '--skip-download',
+        url,
+      ];
 
-        final rawJson = await NativeBridge.executeExtraction(command);
-        if (rawJson != null && rawJson.trim().isNotEmpty) {
-          final Map<String, dynamic> json = jsonDecode(rawJson);
+      final rawJson = await NativeBridge.executeExtraction(command);
+      if (rawJson != null && rawJson.trim().isNotEmpty) {
+        final Map<String, dynamic> json = jsonDecode(rawJson);
 
-          if (json['_type'] == 'playlist') {
-            final playlist = PlaylistInfo.fromJson(json);
-            if (mounted) {
-              setState(() {
-                _extractedPlaylist = playlist;
-                _selectedPlaylistEntryIds.clear();
-                _selectedPlaylistEntryIds.addAll(playlist.entries.map((e) => e.id));
-                _isExtracting = false;
-              });
-            }
-            return;
-          }
-
-          final media = MediaInfo.fromJson(json);
-          final selector = IntelligentFormatSelector(preference: _qualityPreference);
-          final rec = selector.recommendFormat(media: media, device: _deviceCapabilities);
-
+        if (json['_type'] == 'playlist') {
+          final playlist = PlaylistInfo.fromJson(json);
           if (mounted) {
             setState(() {
-              _extractedMedia = media;
-              _recommendation = rec;
-              _selectedFormat = rec.videoFormat ?? (media.formats.isNotEmpty ? media.formats.first : null);
+              _extractedPlaylist = playlist;
+              _selectedPlaylistEntryIds.clear();
+              _selectedPlaylistEntryIds.addAll(playlist.entries.map((e) => e.id));
               _isExtracting = false;
             });
           }
           return;
         }
+
+        final media = MediaInfo.fromJson(json);
+        final selector = IntelligentFormatSelector(preference: _qualityPreference);
+        final rec = selector.recommendFormat(media: media, device: _deviceCapabilities);
+
+        if (mounted) {
+          setState(() {
+            _extractedMedia = media;
+            _recommendation = rec;
+            _selectedFormat = rec.videoFormat ?? (media.formats.isNotEmpty ? media.formats.first : null);
+            _isExtracting = false;
+          });
+        }
+        return;
       }
 
       // 3. Fallback to oEmbed metadata preview if available
@@ -323,31 +329,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
     DownloadStateManager.instance.addTask(task);
 
-    // If DirectMediaEngine supports this URL, download actual media byte streams directly
-    if (DirectMediaEngine.instance.isSupported(targetUrl)) {
-      DirectMediaEngine.instance.startDownload(
-        taskId: taskId,
-        videoUrl: targetUrl,
-        title: _extractedMedia!.title,
-        thumbnailUrl: _extractedMedia!.thumbnail,
-        formatId: _selectedFormat?.formatId ?? 'muxed',
-        formatLabel: formatLabel,
-      );
-    } else {
-      // Dispatch to native Kotlin foreground service with yt-dlp
-      NativeBridge.startForegroundDownload(
-        taskId: taskId,
-        title: task.title,
-        command: [
-          'yt-dlp',
-          '--no-warnings',
-          if (_recommendation != null) ...[
-            '-f', _recommendation!.ytdlpFormatSelector,
-          ],
-          targetUrl,
-        ],
-      );
-    }
+    final formatSelector = _selectedFormat != null && _selectedFormat!.formatId.isNotEmpty
+        ? _selectedFormat!.formatId
+        : (_recommendation?.ytdlpFormatSelector ?? 'bestvideo+bestaudio/best');
+
+    // Dispatch directly to native Android foreground service powered by embedded yt-dlp & FFmpeg
+    NativeBridge.startForegroundDownload(
+      taskId: taskId,
+      title: task.title,
+      command: [
+        'yt-dlp',
+        '--no-warnings',
+        '-f',
+        formatSelector,
+        targetUrl,
+      ],
+    );
 
     widget.onNavigateToDownloads();
   }
@@ -378,26 +375,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
       DownloadStateManager.instance.addTask(task);
 
-      if (DirectMediaEngine.instance.isSupported(entry.url)) {
-        DirectMediaEngine.instance.startDownload(
-          taskId: taskId,
-          videoUrl: entry.url,
-          title: entry.title,
-          thumbnailUrl: entry.thumbnail,
-          formatId: _qualityPreference == QualityPreference.audioOnly ? 'audio' : 'muxed',
-          formatLabel: formatLabel,
-        );
-      } else {
-        NativeBridge.startForegroundDownload(
-          taskId: taskId,
-          title: entry.title,
-          command: [
-            'yt-dlp',
-            '--no-warnings',
-            entry.url,
+      NativeBridge.startForegroundDownload(
+        taskId: taskId,
+        title: entry.title,
+        command: [
+          'yt-dlp',
+          '--no-warnings',
+          if (_qualityPreference == QualityPreference.audioOnly) ...[
+            '-f',
+            'bestaudio/best',
+            '-x',
           ],
-        );
-      }
+          entry.url,
+        ],
+      );
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
