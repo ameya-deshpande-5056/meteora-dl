@@ -21,16 +21,16 @@ void main() {
     ),
   );
 
-  runApp(const MeteoraApp());
+  runApp(const MeteoraDLApp());
 }
 
-class MeteoraApp extends StatelessWidget {
-  const MeteoraApp({super.key});
+class MeteoraDLApp extends StatelessWidget {
+  const MeteoraDLApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Meteora',
+      title: 'MeteoraDL',
       debugShowCheckedModeBanner: false,
       theme: LiquidGlassTheme.themeData,
       home: const MainNavigationScreen(),

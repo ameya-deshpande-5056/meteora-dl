@@ -10,12 +10,13 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import dev.meteora.meteora.MainActivity
-import dev.meteora.meteora.R
 import dev.meteora.meteora.process.SafeProcessExecutor
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 class DownloadForegroundService : Service() {
 
     companion object {
+        private const val TAG = "DownloadFGService"
         const val CHANNEL_ID = "meteora_downloads_channel"
         const val NOTIFICATION_ID = 1001
 
@@ -40,7 +42,11 @@ class DownloadForegroundService : Service() {
         var progressListener: ((Map<String, Any>) -> Unit)? = null
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "Unhandled exception in background download service", throwable)
+    }
+
+    private val serviceScope = CoroutineScope(Dispatchers.IO + Job() + exceptionHandler)
     private val activeTasks = ConcurrentHashMap<String, Job>()
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
@@ -73,42 +79,85 @@ class DownloadForegroundService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun launchDownloadTask(taskId: String, title: String, command: List<String>) {
+    private fun resolveCommand(rawCommand: List<String>): List<String> {
+        if (rawCommand.isEmpty()) return rawCommand
+        val first = rawCommand.first()
+        
+        // If the binary isn't absolute, check if it exists in the active packages directory
+        if (!first.startsWith("/")) {
+            val candidate = File(filesDir, "packages/active/ytdlp/$first")
+            if (candidate.exists()) {
+                val resolved = rawCommand.toMutableList()
+                resolved[0] = candidate.absolutePath
+                return resolved
+            }
+        }
+        return rawCommand
+    }
+
+    private fun launchDownloadTask(taskId: String, title: String, rawCommand: List<String>) {
         val job = serviceScope.launch {
-            emitEvent(taskId, "downloading", 0.0, "0 B/s", "Starting...")
+            try {
+                emitEvent(taskId, "downloading", 0.0, "0 B/s", "Starting...")
 
-            val progressRegex = Regex("""\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+)(\w+)\s+at\s+([\d.]+)(\w+/s)\s+ETA\s+([\d:]+)""")
+                val resolvedCommand = resolveCommand(rawCommand)
+                val executableFile = File(resolvedCommand.first())
 
-            val result = processExecutor.execute(
-                command = command,
-                workingDir = filesDir,
-                onLineOutput = { line ->
-                    val match = progressRegex.find(line)
-                    if (match != null) {
-                        val percent = match.groupValues[1].toDoubleOrNull() ?: 0.0
-                        val totalSize = "${match.groupValues[2]} ${match.groupValues[3]}"
-                        val speed = "${match.groupValues[4]} ${match.groupValues[5]}"
-                        val eta = match.groupValues[6]
-
-                        updateNotification(title, "$speed • ETA $eta", percent.toInt())
-                        emitEvent(taskId, "downloading", percent, speed, eta, totalSize)
+                // Check if the binary is accessible or if we need to notify the user
+                if (!executableFile.isAbsolute && !File("/system/bin/${resolvedCommand.first()}").exists()) {
+                    val candidate = File(filesDir, "packages/active/ytdlp/yt-dlp")
+                    if (!candidate.exists()) {
+                        val errMsg = "Component '${resolvedCommand.first()}' is not installed yet. Please update it in Settings."
+                        emitEvent(taskId, "error", 0.0, "0 B/s", errMsg)
+                        updateNotification(title, "Engine not installed", 0)
+                        activeTasks.remove(taskId)
+                        if (activeTasks.isEmpty()) {
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf()
+                        }
+                        return@launch
                     }
                 }
-            )
 
-            if (result.isCancelled) {
-                emitEvent(taskId, "cancelled", 0.0, "0 B/s", "")
-            } else if (result.exitCode == 0) {
-                emitEvent(taskId, "completed", 100.0, "0 B/s", "Done")
-                updateNotification(title, "Download complete", 100)
-            } else {
-                emitEvent(taskId, "error", 0.0, "0 B/s", "Failed with code ${result.exitCode}")
-            }
+                val progressRegex = Regex("""\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+)(\w+)\s+at\s+([\d.]+)(\w+/s)\s+ETA\s+([\d:]+)""")
 
-            activeTasks.remove(taskId)
-            if (activeTasks.isEmpty()) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                val result = processExecutor.execute(
+                    command = resolvedCommand,
+                    workingDir = filesDir,
+                    onLineOutput = { line ->
+                        val match = progressRegex.find(line)
+                        if (match != null) {
+                            val percent = match.groupValues[1].toDoubleOrNull() ?: 0.0
+                            val totalSize = "${match.groupValues[2]} ${match.groupValues[3]}"
+                            val speed = "${match.groupValues[4]} ${match.groupValues[5]}"
+                            val eta = match.groupValues[6]
+
+                            updateNotification(title, "$speed • ETA $eta", percent.toInt())
+                            emitEvent(taskId, "downloading", percent, speed, eta, totalSize)
+                        }
+                    }
+                )
+
+                if (result.isCancelled) {
+                    emitEvent(taskId, "cancelled", 0.0, "0 B/s", "")
+                } else if (result.exitCode == 0) {
+                    emitEvent(taskId, "completed", 100.0, "0 B/s", "Done")
+                    updateNotification(title, "Download complete", 100)
+                } else {
+                    val message = result.errorMessage ?: "Failed with exit code ${result.exitCode}"
+                    emitEvent(taskId, "error", 0.0, "0 B/s", message)
+                    updateNotification(title, "Download error", 0)
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Exception during download task execution", e)
+                emitEvent(taskId, "error", 0.0, "0 B/s", e.localizedMessage ?: "Unknown error")
+                updateNotification(title, "Download error", 0)
+            } finally {
+                activeTasks.remove(taskId)
+                if (activeTasks.isEmpty()) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
             }
         }
 
@@ -192,12 +241,13 @@ class DownloadForegroundService : Service() {
 
     private fun acquireLocks() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-        wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Meteora:DownloadWakeLock")?.apply {
+        wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MeteoraDL:DownloadWakeLock")?.apply {
             acquire(3 * 60 * 60 * 1000L) // 3 hours safety timeout
         }
 
         val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-        wifiLock = wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "Meteora:DownloadWifiLock")?.apply {
+        @Suppress("DEPRECATION")
+        wifiLock = wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "MeteoraDL:DownloadWifiLock")?.apply {
             acquire()
         }
     }

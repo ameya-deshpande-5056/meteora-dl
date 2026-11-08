@@ -73,15 +73,16 @@ class MainActivity : FlutterActivity() {
                     }
 
                     scope.launch {
-                        val execResult = processExecutor.execute(command, filesDir)
-                        if (execResult.exitCode == 0) {
-                            result.success(execResult.output)
-                        } else {
-                            result.error(
-                                "EXTRACTION_FAILED",
-                                "Exit code ${execResult.exitCode}: ${execResult.output}",
-                                null
-                            )
+                        try {
+                            val execResult = processExecutor.execute(command, filesDir)
+                            if (execResult.exitCode == 0) {
+                                result.success(execResult.output)
+                            } else {
+                                val err = execResult.errorMessage ?: "Exit code ${execResult.exitCode}: ${execResult.output}"
+                                result.error("EXTRACTION_FAILED", err, null)
+                            }
+                        } catch (e: Throwable) {
+                            result.error("EXECUTION_ERROR", e.localizedMessage ?: "Unknown error", null)
                         }
                     }
                 }

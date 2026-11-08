@@ -228,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: 8),
                           const Text(
-                            'METEORA',
+                            'METEORADL',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w800,

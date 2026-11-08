@@ -4,3 +4,4 @@ export 'models/package_release.dart';
 export 'security/checksum_verifier.dart';
 export 'staging/atomic_directory_manager.dart';
 export 'updater/package_update_manager.dart';
+export 'updater/github_release_client.dart';

@@ -2,12 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meteora/main.dart';
 
 void main() {
-  testWidgets('Meteora app smoke and navigation test', (WidgetTester tester) async {
-    await tester.pumpWidget(const MeteoraApp());
+  testWidgets('MeteoraDL app smoke and navigation test', (WidgetTester tester) async {
+    await tester.pumpWidget(const MeteoraDLApp());
     await tester.pumpAndSettle();
 
-    // Verify METEORA brand title is displayed
-    expect(find.text('METEORA'), findsOneWidget);
+    // Verify METEORADL brand title is displayed
+    expect(find.text('METEORADL'), findsOneWidget);
 
     // Verify all 4 navigation destinations exist
     expect(find.text('Home'), findsOneWidget);
