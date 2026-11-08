@@ -51,7 +51,11 @@ jobs:
           echo "Building Meteora release for tag: ${TAG}"
 
       - name: Install Dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          (cd packages/media_engine && flutter pub get)
+          (cd packages/package_manager && flutter pub get)
+          (cd packages/media_library && flutter pub get)
 
       - name: Run Code Analysis
         run: flutter analyze

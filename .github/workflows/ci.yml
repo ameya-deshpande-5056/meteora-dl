@@ -29,8 +29,12 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install Root Dependencies
-        run: flutter pub get
+      - name: Install Dependencies
+        run: |
+          flutter pub get
+          (cd packages/media_engine && flutter pub get)
+          (cd packages/package_manager && flutter pub get)
+          (cd packages/media_library && flutter pub get)
 
       - name: Run Static Code Analysis
         run: flutter analyze --fatal-infos
