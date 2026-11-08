@@ -1,12 +1,20 @@
-# Meteora ⚡
+<p align="center">
+  <img src="assets/icon/app_icon_squircle.png" width="128" height="128" alt="Meteora App Icon" />
+</p>
 
-> **Lightweight, high-performance, open-source Android media downloader powered by yt-dlp, FFmpeg, and Material 3 Expressive.**
+<h1 align="center">Meteora</h1>
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Flutter](https://img.shields.io/badge/Flutter-3.41+-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.2+-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
-[![Android](https://img.shields.io/badge/Android-7.0%20to%2015-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
-[![Release](https://img.shields.io/badge/Release-v0.0.1-orange.svg)](https://github.com/meteora-app/meteora-dl/releases)
+<p align="center">
+  <strong>Lightweight, high-performance, open-source Android media downloader powered by yt-dlp, FFmpeg, and Material 3 Expressive.</strong>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3" /></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.41+-02569B?logo=flutter&logoColor=white" alt="Flutter" /></a>
+  <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.2+-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin" /></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-7.0+-3DDC84?logo=android&logoColor=white" alt="Android" /></a>
+  <a href="https://github.com/meteora-app/meteora-dl/releases"><img src="https://img.shields.io/badge/Release-v0.0.1-orange.svg" alt="Release" /></a>
+</p>
 
 ---
 
