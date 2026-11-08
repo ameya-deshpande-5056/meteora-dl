@@ -1,0 +1,13 @@
+---
+description: Canonical agent rules for Meteora
+globs: *
+---
+# Cursor Agent Guidelines
+
+The canonical source of instructions for this project is:
+👉 [AGENTS.md](file:///home/ameya/meteora-dl/AGENTS.md)
+
+- Architecture: Flutter presentation layer + Kotlin ForegroundService + modular Dart domain packages.
+- Zero Shell Construction: Always use direct argument arrays for `ProcessBuilder`.
+- Package Updates: Always validate checksums and use staging/atomic swaps.
+- Code style: Effective Dart, immutable state, idiomatically typed Kotlin.
