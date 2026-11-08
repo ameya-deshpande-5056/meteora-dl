@@ -123,25 +123,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Release Channel', style: theme.textTheme.titleSmall),
-                            Text('Select update cadence', style: theme.textTheme.bodySmall),
-                          ],
-                        ),
-                        SegmentedButton<UpdateChannel>(
-                          segments: const [
-                            ButtonSegment(value: UpdateChannel.stable, label: Text('Stable')),
-                            ButtonSegment(value: UpdateChannel.nightly, label: Text('Nightly')),
-                          ],
-                          selected: {_selectedChannel},
-                          onSelectionChanged: (set) => setState(() => _selectedChannel = set.first),
-                        ),
-                      ],
+                    Text('Release Channel', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text('Select update cadence for extractor binaries.', style: theme.textTheme.bodySmall),
+                    const SizedBox(height: AppSpacing.md),
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<UpdateChannel>(
+                        segments: const [
+                          ButtonSegment(value: UpdateChannel.stable, label: Text('Stable')),
+                          ButtonSegment(value: UpdateChannel.nightly, label: Text('Nightly')),
+                        ],
+                        selected: {_selectedChannel},
+                        onSelectionChanged: (set) => setState(() => _selectedChannel = set.first),
+                      ),
                     ),
                     const Divider(height: AppSpacing.xl),
 
@@ -153,7 +148,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(pkg.displayName, style: theme.textTheme.bodyMedium),
+                            Expanded(
+                              child: Text(pkg.displayName, style: theme.textTheme.bodyMedium),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
@@ -271,7 +269,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Display Resolution', style: theme.textTheme.bodyMedium),
+                        Expanded(
+                          child: Text('Display Resolution', style: theme.textTheme.bodyMedium),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
                         Text(
                           '${_deviceCapabilities.displayWidth}x${_deviceCapabilities.displayHeight} @ ${_deviceCapabilities.displayRefreshRate.round()}Hz',
                           style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
@@ -282,7 +283,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Available Storage', style: theme.textTheme.bodyMedium),
+                        Expanded(
+                          child: Text('Available Storage', style: theme.textTheme.bodyMedium),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
                         Text(
                           '${(_deviceCapabilities.freeStorageBytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB',
                           style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
