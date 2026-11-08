@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  analyze-and-test:
+    name: Lint, Test & Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Root Dependencies
+        run: flutter pub get
+
+      - name: Run Static Code Analysis
+        run: flutter analyze --fatal-infos
+
+      - name: Run Root Tests
+        run: flutter test
+
+      - name: Run Package Tests
+        run: |
+          (cd packages/media_engine && flutter test)
+          (cd packages/package_manager && flutter test)
+          (cd packages/media_library && flutter test)
+
+      - name: Build Debug APK (Verification)
+        run: flutter build apk --debug --split-per-abi

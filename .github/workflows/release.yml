@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag name (e.g., v0.0.1)'
+        required: false
+        default: 'v0.0.1'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build APKs & Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Extract Tag Name
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Building Meteora release for tag: ${TAG}"
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Code Analysis
+        run: flutter analyze
+
+      - name: Run Automated Tests
+        run: |
+          flutter test
+          (cd packages/media_engine && flutter test)
+          (cd packages/package_manager && flutter test)
+          (cd packages/media_library && flutter test)
+
+      - name: Build Split-per-ABI Release APKs
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build Universal Release APK
+        run: flutter build apk --release
+
+      - name: Package & Prepare Release Artifacts
+        id: prepare_artifacts
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          mkdir -p dist
+
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/meteora-${TAG}-arm64-v8a.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "dist/meteora-${TAG}-armeabi-v7a.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "dist/meteora-${TAG}-x86_64.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/meteora-${TAG}-universal.apk"
+
+          cd dist
+          sha256sum meteora-*.apk > checksums.txt
+          cat checksums.txt
+          cd ..
+
+      - name: Extract Changelog Entry
+        id: changelog
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          VERSION="${TAG#v}"
+          
+          # Extract the entry for this version from CHANGELOG.md if present
+          if [ -f CHANGELOG.md ]; then
+            sed -n "/## \[${VERSION}\]/,/## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
+          fi
+          
+          if [ ! -s release_notes.md ]; then
+            cat << 'EOF' > release_notes.md
+          ## Meteora Release
+          Welcome to the new release of Meteora!
+          See commit logs and CHANGELOG.md for detailed breakdown.
+          EOF
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Meteora ${{ steps.vars.outputs.tag }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            dist/meteora-*.apk
+            dist/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
