@@ -89,4 +89,17 @@ class NativeBridge {
       'isVideo': isVideo,
     });
   }
+
+  static Future<bool> playMedia({
+    required String filePath,
+    required String title,
+    bool isVideo = true,
+  }) async {
+    final res = await _methodChannel.invokeMethod<bool>('playMedia', {
+      'filePath': filePath,
+      'title': title,
+      'isVideo': isVideo,
+    });
+    return res ?? false;
+  }
 }

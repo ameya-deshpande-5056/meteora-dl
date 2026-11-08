@@ -49,7 +49,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        val capabilityDetector = DeviceCapabilityDetector(applicationContext)
+        val capabilityDetector = DeviceCapabilityDetector(this)
         val mediaStoreHelper = MediaStoreHelper(applicationContext)
 
         // 1. MethodChannel for RPC actions
@@ -127,6 +127,20 @@ class MainActivity : FlutterActivity() {
                         )
                         result.success(uri?.toString())
                     }
+                }
+
+                "playMedia" -> {
+                    val filePath = call.argument<String>("filePath") ?: ""
+                    val title = call.argument<String>("title") ?: "Media Playback"
+                    val isVideo = call.argument<Boolean>("isVideo") ?: true
+
+                    val intent = Intent(this, dev.meteora.meteora.player.PlayerActivity::class.java).apply {
+                        putExtra(dev.meteora.meteora.player.PlayerActivity.EXTRA_MEDIA_PATH, filePath)
+                        putExtra(dev.meteora.meteora.player.PlayerActivity.EXTRA_MEDIA_TITLE, title)
+                        putExtra(dev.meteora.meteora.player.PlayerActivity.EXTRA_IS_VIDEO, isVideo)
+                    }
+                    startActivity(intent)
+                    result.success(true)
                 }
 
                 else -> result.notImplemented()

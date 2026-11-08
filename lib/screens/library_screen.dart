@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:media_library/media_library.dart';
+import '../services/native_bridge.dart';
 import '../state/download_state.dart';
 import '../theme/app_shapes.dart';
 import '../theme/app_spacing.dart';
@@ -265,6 +266,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   style: theme.textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.lg),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      NativeBridge.playMedia(
+                        filePath: item.localFilePath,
+                        title: item.title,
+                        isVideo: item.mediaType == LibraryMediaType.video,
+                      );
+                    },
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Text('Play with Android Media3'),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
               ],
             ),
           ),

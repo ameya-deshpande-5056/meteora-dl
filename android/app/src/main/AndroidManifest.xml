@@ -48,6 +48,13 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Android Media3 (ExoPlayer) native playback interface -->
+        <activity
+            android:name=".player.PlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
