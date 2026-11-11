@@ -7,6 +7,9 @@ import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLException
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.yausername.youtubedl_android.YoutubeDLResponse
+import java.io.File
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -19,6 +22,9 @@ object NativeEngineManager {
     @Volatile
     private var isInitialized = false
 
+    @Volatile
+    private var cacheDirPath: String? = null
+
     suspend fun init(context: Context): Boolean = withContext(Dispatchers.IO) {
         if (isInitialized) return@withContext true
         mutex.withLock {
@@ -28,6 +34,11 @@ object NativeEngineManager {
                 YoutubeDL.getInstance().init(context.applicationContext)
                 Log.i(TAG, "Initializing embedded FFmpeg binaries...")
                 FFmpeg.getInstance().init(context.applicationContext)
+                val cacheDir = File(context.applicationContext.cacheDir, "ytdlp-cache")
+                if (!cacheDir.exists()) {
+                    cacheDir.mkdirs()
+                }
+                cacheDirPath = cacheDir.absolutePath
                 isInitialized = true
                 val ver = getVersion(context)
                 Log.i(TAG, "Native yt-dlp engine ($ver) & FFmpeg initialized successfully.")
@@ -65,11 +76,46 @@ object NativeEngineManager {
         }
     }
 
+    private fun hasActiveIpv4Interface(): Boolean {
+        return try {
+            val interfaces = NetworkInterface.getNetworkInterfaces() ?: return false
+            while (interfaces.hasMoreElements()) {
+                val iface = interfaces.nextElement()
+                if (!iface.isUp || iface.isLoopback) continue
+                val addrs = iface.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
+                        return true
+                    }
+                }
+            }
+            false
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun applyRuntimeDefaults(request: YoutubeDLRequest) {
+        cacheDirPath?.let { path ->
+            if (!request.hasOption("--cache-dir")) {
+                request.addOption("--cache-dir", path)
+            }
+        }
+        if (!request.hasOption("--remote-components")) {
+            request.addOption("--remote-components", "ejs:github")
+        }
+        if (!request.hasOption("--force-ipv4") && !request.hasOption("-4") && hasActiveIpv4Interface()) {
+            request.addOption("--force-ipv4")
+        }
+    }
+
     suspend fun execute(
         request: YoutubeDLRequest,
         processId: String? = null,
         callback: ((Float, Long, String) -> Unit)? = null
     ): YoutubeDLResponse = withContext(Dispatchers.IO) {
+        applyRuntimeDefaults(request)
         if (processId != null && callback != null) {
             YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
                 callback(progress, etaInSeconds, line)

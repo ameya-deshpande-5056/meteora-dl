@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'app_shapes.dart';
 import 'app_typography.dart';
 
 enum AppThemeMode {
-  system('Follow System'),
-  light('Light Mode'),
-  dark('Dark Mode'),
-  amoled('AMOLED Black');
+  system('Follow System', 'Match device appearance'),
+  light('Light Mode', 'Clean bright appearance'),
+  dark('Dark Mode', 'Low-light dark theme'),
+  amoled('AMOLED Black', 'Pure black for OLED displays');
 
   final String label;
-  const AppThemeMode(this.label);
+  final String description;
+  const AppThemeMode(this.label, this.description);
 }
 
 class AppTheme {
@@ -36,11 +38,23 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 2,
         centerTitle: false,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.dark,
+        ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        shape: AppShapes.cardShape,
-        color: colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppShapes.medium),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withAlpha(90),
+            width: 0.8,
+          ),
+        ),
+        color: colorScheme.surfaceContainerLow.withAlpha(215),
         clipBehavior: Clip.antiAlias,
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -103,11 +117,25 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: amoled ? 0 : 2,
         centerTitle: false,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.light,
+        ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        shape: AppShapes.cardShape,
-        color: amoled ? const Color(0xFF101010) : colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppShapes.medium),
+          side: BorderSide(
+            color: Colors.white.withAlpha(amoled ? 30 : 24),
+            width: 0.8,
+          ),
+        ),
+        color: amoled
+            ? const Color(0xD90E0E0E)
+            : colorScheme.surfaceContainerLow.withAlpha(205),
         clipBehavior: Clip.antiAlias,
       ),
       filledButtonTheme: FilledButtonThemeData(

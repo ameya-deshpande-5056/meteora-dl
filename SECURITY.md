@@ -6,8 +6,8 @@ Only the latest release and the current active development branch receive securi
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1.0 | :x:                |
+| 0.0.2+  | :white_check_mark: |
+| < 0.0.2 | :x:                |
 
 ---
 

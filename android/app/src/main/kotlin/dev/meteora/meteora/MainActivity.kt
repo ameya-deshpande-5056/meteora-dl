@@ -1,17 +1,23 @@
 package dev.meteora.meteora
 
 import android.Manifest
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import dev.meteora.meteora.engine.NativeEngineManager
 import dev.meteora.meteora.hardware.DeviceCapabilityDetector
 import dev.meteora.meteora.process.SafeProcessExecutor
 import dev.meteora.meteora.service.DownloadForegroundService
+import dev.meteora.meteora.storage.DownloadStorageManager
 import dev.meteora.meteora.storage.MediaStoreHelper
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -28,18 +34,51 @@ class MainActivity : FlutterActivity() {
         const val METHOD_CHANNEL = "dev.meteora/engine"
         const val EVENT_CHANNEL = "dev.meteora/downloads"
         private const val PERMISSION_REQUEST_CODE = 1002
+        private const val DIR_PICKER_REQUEST_CODE = 1003
     }
 
     private var sharedUrl: String? = null
+    private var pendingDirectoryResult: MethodChannel.Result? = null
+    private var pendingPermissionsResult: MethodChannel.Result? = null
     private val scope = CoroutineScope(Dispatchers.Main)
     private val processExecutor = SafeProcessExecutor()
+    private val storageManager by lazy { DownloadStorageManager(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
-        checkAndRequestPermissions()
         scope.launch {
             NativeEngineManager.init(applicationContext)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            val pending = pendingPermissionsResult
+            pendingPermissionsResult = null
+            pending?.success(buildPermissionStatusMap())
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == DIR_PICKER_REQUEST_CODE) {
+            val pending = pendingDirectoryResult
+            pendingDirectoryResult = null
+            if (pending != null) {
+                if (resultCode == Activity.RESULT_OK && data?.data != null) {
+                    val info = storageManager.setCustomDownloadDirectory(data.data!!)
+                    pending.success(info)
+                } else {
+                    pending.success(null)
+                }
+            }
         }
     }
 
@@ -57,31 +96,40 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun checkAndRequestPermissions() {
-        val permissionsToRequest = mutableListOf<String>()
-
+    private fun requiredRuntimePermissions(): List<String> {
+        val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.READ_MEDIA_VIDEO)
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
-            }
+            needed.add(Manifest.permission.POST_NOTIFICATIONS)
+            needed.add(Manifest.permission.READ_MEDIA_VIDEO)
+            needed.add(Manifest.permission.READ_MEDIA_AUDIO)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
+            needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            needed.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
+        return needed
+    }
 
-        if (permissionsToRequest.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE)
+    private fun missingRuntimePermissions(): List<String> {
+        return requiredRuntimePermissions().filter { perm ->
+            ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED
         }
+    }
+
+    private fun buildPermissionStatusMap(): Map<String, Boolean> {
+        val missing = missingRuntimePermissions()
+        val notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        val storageGranted = missing.none { it != Manifest.permission.POST_NOTIFICATIONS }
+        return mapOf(
+            "notificationsGranted" to notificationsGranted,
+            "storageGranted" to storageGranted,
+            "allGranted" to missing.isEmpty(),
+        )
     }
 
     private fun resolveCommand(rawCommand: List<String>): List<String> {
@@ -142,9 +190,23 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                "getPermissionStatus" -> {
+                    result.success(buildPermissionStatusMap())
+                }
+
                 "requestPermissions" -> {
-                    checkAndRequestPermissions()
-                    result.success(true)
+                    val missing = missingRuntimePermissions()
+                    if (missing.isEmpty()) {
+                        result.success(buildPermissionStatusMap())
+                    } else {
+                        pendingPermissionsResult?.success(buildPermissionStatusMap())
+                        pendingPermissionsResult = result
+                        ActivityCompat.requestPermissions(
+                            this,
+                            missing.toTypedArray(),
+                            PERMISSION_REQUEST_CODE,
+                        )
+                    }
                 }
 
                 "getInitialSharedUrl" -> {
@@ -223,18 +285,84 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                "getDownloadLocation" -> {
+                    result.success(storageManager.getDownloadLocationInfo())
+                }
+
+                "pickDownloadDirectory" -> {
+                    pendingDirectoryResult?.success(null)
+                    pendingDirectoryResult = result
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                        addFlags(
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                                Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                        )
+                    }
+                    try {
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(intent, DIR_PICKER_REQUEST_CODE)
+                    } catch (_: ActivityNotFoundException) {
+                        pendingDirectoryResult = null
+                        result.success(null)
+                    }
+                }
+
+                "resetDownloadLocation" -> {
+                    result.success(storageManager.resetToDefaultDirectory())
+                }
+
                 "playMedia" -> {
                     val filePath = call.argument<String>("filePath") ?: ""
-                    val title = call.argument<String>("title") ?: "Media Playback"
+                    val title = call.argument<String>("title") ?: "Open with"
                     val isVideo = call.argument<Boolean>("isVideo") ?: true
+                    val mimeTypeArg = call.argument<String>("mimeType")
 
-                    val intent = Intent(this, dev.meteora.meteora.player.PlayerActivity::class.java).apply {
-                        putExtra(dev.meteora.meteora.player.PlayerActivity.EXTRA_MEDIA_PATH, filePath)
-                        putExtra(dev.meteora.meteora.player.PlayerActivity.EXTRA_MEDIA_TITLE, title)
-                        putExtra(dev.meteora.meteora.player.PlayerActivity.EXTRA_IS_VIDEO, isVideo)
+                    if (filePath.isBlank()) {
+                        result.success(false)
+                        return@setMethodCallHandler
                     }
-                    startActivity(intent)
-                    result.success(true)
+
+                    try {
+                        val uri = when {
+                            filePath.startsWith("content://") -> Uri.parse(filePath)
+                            filePath.startsWith("http://") || filePath.startsWith("https://") -> Uri.parse(filePath)
+                            else -> {
+                                val rawPath = if (filePath.startsWith("file://")) {
+                                    Uri.parse(filePath).path ?: filePath
+                                } else {
+                                    filePath
+                                }
+                                val file = File(rawPath)
+                                if (!file.exists()) {
+                                    result.success(false)
+                                    return@setMethodCallHandler
+                                }
+                                FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+                            }
+                        }
+
+                        val resolvedMime = mimeTypeArg?.takeIf { it.isNotBlank() }
+                            ?: DownloadStorageManager.resolveOpenMimeType(contentResolver, uri, filePath, isVideo)
+
+                        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, resolvedMime)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            clipData = ClipData.newRawUri(title, uri)
+                            putExtra("title", title)
+                        }
+
+                        val chooser = Intent.createChooser(viewIntent, "Open with").apply {
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        startActivity(chooser)
+                        result.success(true)
+                    } catch (_: ActivityNotFoundException) {
+                        result.success(false)
+                    } catch (e: Throwable) {
+                        result.error("OPEN_MEDIA_ERROR", e.localizedMessage ?: "Failed to open external player", null)
+                    }
                 }
 
                 else -> result.notImplemented()

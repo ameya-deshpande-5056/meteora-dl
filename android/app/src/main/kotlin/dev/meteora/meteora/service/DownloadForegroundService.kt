@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.wifi.WifiManager
 import android.os.Build
-import android.os.Environment
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
@@ -18,7 +17,10 @@ import com.yausername.youtubedl_android.YoutubeDLRequest
 import dev.meteora.meteora.MainActivity
 import dev.meteora.meteora.engine.NativeEngineManager
 import dev.meteora.meteora.process.SafeProcessExecutor
+import dev.meteora.meteora.storage.DownloadStorageManager
+import dev.meteora.meteora.storage.PublishedFileResult
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +58,7 @@ class DownloadForegroundService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
     private lateinit var notificationManager: NotificationManager
     private val processExecutor = SafeProcessExecutor()
+    private val storageManager by lazy { DownloadStorageManager(applicationContext) }
 
     override fun onCreate() {
         super.onCreate()
@@ -100,6 +103,10 @@ class DownloadForegroundService : Service() {
     }
 
     private fun launchDownloadTask(taskId: String, title: String, rawCommand: List<String>) {
+        val safeTaskId = taskId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val stagingBase = applicationContext.getExternalFilesDir(null) ?: applicationContext.filesDir
+        val stagingDir = File(stagingBase, "staging/$safeTaskId")
+
         val job = serviceScope.launch {
             try {
                 emitEvent(taskId, "downloading", 0.0, "0 B/s", "Starting...")
@@ -108,34 +115,63 @@ class DownloadForegroundService : Service() {
                     NativeEngineManager.init(applicationContext)
                 }
 
-                val downloadDir = File(
-                    applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                    "Meteora"
-                )
-                if (!downloadDir.exists()) {
-                    downloadDir.mkdirs()
+                if (!stagingDir.exists()) {
+                    stagingDir.mkdirs()
                 }
 
                 val args = if (rawCommand.firstOrNull() == "yt-dlp") rawCommand.drop(1) else rawCommand
-                val request = YoutubeDLRequest(emptyList())
-                request.addCommands(args)
-
-                // If output path is not provided in command, default to app storage downloadDir
-                if (!request.hasOption("-o") && !request.hasOption("--output")) {
-                    request.addOption("-o", "${downloadDir.absolutePath}/%(title)s [%(id)s].%(ext)s")
-                }
-
                 val speedRegex = Regex("""(\d+(\.\d+)?\s*(K|M|G)?i?B/s)""")
 
-                NativeEngineManager.execute(request, processId = taskId) { progress, etaInSeconds, line ->
-                    val speedMatch = speedRegex.find(line)
-                    val speed = speedMatch?.value ?: ""
-                    val etaStr = if (etaInSeconds > 0) "${etaInSeconds}s" else ""
-                    updateNotification(title, if (speed.isNotEmpty()) "$speed • ETA $etaStr" else "Downloading...", progress.toInt())
-                    emitEvent(taskId, "downloading", progress.toDouble(), speed, etaStr)
+                executeWithRecovery(args, stagingDir, taskId, title, speedRegex)
+
+                val producedFiles = stagingDir.listFiles()
+                    ?.filter { file ->
+                        file.isFile &&
+                            !file.name.endsWith(".part", ignoreCase = true) &&
+                            !file.name.endsWith(".ytdl", ignoreCase = true) &&
+                            !file.name.endsWith(".tmp", ignoreCase = true)
+                    }
+                    ?.sortedBy { file ->
+                        if (DownloadStorageManager.isSubtitleFile(file.name)) 1 else 0
+                    }
+                    .orEmpty()
+
+                if (producedFiles.isEmpty()) {
+                    val errorMsg = if (args.contains("--skip-download")) {
+                        "No subtitles were available for this item"
+                    } else {
+                        "No output file was produced"
+                    }
+                    emitEvent(taskId, "error", 0.0, "0 B/s", errorMsg)
+                    updateNotification(title, errorMsg, 0)
+                    return@launch
                 }
 
-                emitEvent(taskId, "completed", 100.0, "0 B/s", "Done")
+                var primaryPublished: PublishedFileResult? = null
+                for (file in producedFiles) {
+                    val published = storageManager.publishFile(file)
+                    if (published != null && primaryPublished == null) {
+                        primaryPublished = published
+                    }
+                }
+
+                if (primaryPublished == null) {
+                    val errorMsg = "Failed to save downloaded file to destination folder"
+                    emitEvent(taskId, "error", 0.0, "0 B/s", errorMsg)
+                    updateNotification(title, errorMsg, 0)
+                    return@launch
+                }
+
+                val formattedSize = formatByteSize(primaryPublished.sizeBytes)
+                emitEvent(
+                    taskId = taskId,
+                    status = "completed",
+                    percent = 100.0,
+                    speed = "0 B/s",
+                    eta = "Done",
+                    totalSize = formattedSize,
+                    filePath = primaryPublished.uriOrPath,
+                )
                 updateNotification(title, "Download complete", 100)
             } catch (e: YoutubeDL.CanceledException) {
                 emitEvent(taskId, "cancelled", 0.0, "0 B/s", "")
@@ -144,6 +180,7 @@ class DownloadForegroundService : Service() {
                 emitEvent(taskId, "error", 0.0, "0 B/s", e.localizedMessage ?: "Unknown error")
                 updateNotification(title, "Download error", 0)
             } finally {
+                stagingDir.deleteRecursively()
                 activeTasks.remove(taskId)
                 if (activeTasks.isEmpty()) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -153,6 +190,188 @@ class DownloadForegroundService : Service() {
         }
 
         activeTasks[taskId] = job
+    }
+
+    private suspend fun executeWithRecovery(
+        args: List<String>,
+        stagingDir: File,
+        taskId: String,
+        title: String,
+        speedRegex: Regex,
+    ) {
+        val isSubtitlesOnly = args.contains("--skip-download")
+        try {
+            executeYtDlpRequest(buildRequest(args, stagingDir), taskId, title, speedRegex)
+        } catch (e: YoutubeDL.CanceledException) {
+            throw e
+        } catch (e: Throwable) {
+            val errText = e.message ?: e.localizedMessage ?: ""
+            val isSubtitleError =
+                errText.contains("Unable to download video subtitles", ignoreCase = true) ||
+                    errText.contains("timedtext", ignoreCase = true)
+            val isForbiddenError =
+                errText.contains("HTTP Error 403", ignoreCase = true) ||
+                    errText.contains("unable to download video data", ignoreCase = true)
+            val hasSubtitleFlags =
+                args.contains("--write-subs") || args.contains("--write-auto-subs")
+
+            if (isSubtitleError && hasSubtitleFlags && !isSubtitlesOnly) {
+                Log.w(TAG, "Subtitle download failed ($errText); retrying media download without subtitles", e)
+                emitEvent(taskId, "downloading", 0.0, "0 B/s", "Subtitles rate-limited, continuing...")
+                updateNotification(title, "Subtitles unavailable, downloading media...", 0)
+                val noSubArgs = stripSubtitleArgs(args)
+                executeWithRecovery(noSubArgs, stagingDir, taskId, title, speedRegex)
+            } else if (isForbiddenError && !isSubtitlesOnly && !args.contains("--extractor-args")) {
+                Log.w(TAG, "Stream returned 403 Forbidden; retrying with fallback player clients", e)
+                cleanupPartialFiles(stagingDir)
+                emitEvent(taskId, "downloading", 0.0, "0 B/s", "Switching stream client...")
+                updateNotification(title, "Retrying with compatible stream...", 0)
+                val fallbackArgs = buildFallback403Args(args)
+                try {
+                    executeYtDlpRequest(buildRequest(fallbackArgs, stagingDir), taskId, title, speedRegex)
+                } catch (retryErr: Throwable) {
+                    val retryMsg = retryErr.message ?: retryErr.localizedMessage ?: ""
+                    val retrySubErr =
+                        retryMsg.contains("Unable to download video subtitles", ignoreCase = true) ||
+                            retryMsg.contains("timedtext", ignoreCase = true)
+                    if (retrySubErr && (fallbackArgs.contains("--write-subs") || fallbackArgs.contains("--write-auto-subs"))) {
+                        executeYtDlpRequest(
+                            buildRequest(stripSubtitleArgs(fallbackArgs), stagingDir),
+                            taskId,
+                            title,
+                            speedRegex,
+                        )
+                    } else {
+                        throw retryErr
+                    }
+                }
+            } else if (isSubtitleError && errText.contains("429")) {
+                throw IllegalStateException(
+                    "Subtitles were rate-limited by YouTube (HTTP 429). Please retry in a moment.",
+                    e,
+                )
+            } else {
+                throw e
+            }
+        }
+    }
+
+    private fun cleanupPartialFiles(stagingDir: File) {
+        stagingDir.listFiles()?.forEach { file ->
+            if (file.isFile && (file.name.endsWith(".part", true) || file.name.endsWith(".ytdl", true))) {
+                file.delete()
+            }
+        }
+    }
+
+    private fun buildFallback403Args(args: List<String>): List<String> {
+        val updated = mutableListOf<String>()
+        val isAudioOnly = args.contains("-x")
+        var i = 0
+        var replacedFormat = false
+        while (i < args.size) {
+            val token = args[i]
+            if (token == "-f" && i + 1 < args.size) {
+                val origFmt = args[i + 1]
+                val fallbackFmt = when {
+                    isAudioOnly -> "bestaudio/best"
+                    origFmt.contains("+") -> "bestvideo+bestaudio/best"
+                    else -> "bestvideo/best"
+                }
+                updated.add("-f")
+                updated.add(fallbackFmt)
+                replacedFormat = true
+                i += 2
+            } else {
+                updated.add(token)
+                i += 1
+            }
+        }
+        val insertPos = if (updated.isNotEmpty()) updated.size - 1 else 0
+        val extra = mutableListOf<String>()
+        if (!replacedFormat && !isAudioOnly) {
+            extra.addAll(listOf("-f", "bestvideo+bestaudio/best"))
+        }
+        extra.addAll(listOf("--extractor-args", "youtube:player_client=tv,android_vr,visionos"))
+        if (!updated.contains("--force-ipv4") && !updated.contains("-4")) {
+            extra.add("--force-ipv4")
+        }
+        updated.addAll(insertPos, extra)
+        return updated
+    }
+
+    private fun buildRequest(args: List<String>, stagingDir: File): YoutubeDLRequest {
+        val request = YoutubeDLRequest(emptyList())
+        request.addCommands(args)
+        if (!request.hasOption("--retries")) {
+            request.addOption("--retries", "5")
+        }
+        if (!request.hasOption("--fragment-retries")) {
+            request.addOption("--fragment-retries", "10")
+        }
+        if (!request.hasOption("--extractor-retries")) {
+            request.addOption("--extractor-retries", "3")
+        }
+        // Stage downloads inside isolated task directory before publishing to public/user storage
+        if (!request.hasOption("-o") && !request.hasOption("--output")) {
+            request.addOption("-o", "${stagingDir.absolutePath}/%(title)s [%(id)s].%(ext)s")
+        }
+        return request
+    }
+
+    private suspend fun executeYtDlpRequest(
+        request: YoutubeDLRequest,
+        taskId: String,
+        title: String,
+        speedRegex: Regex,
+    ) {
+        NativeEngineManager.execute(request, processId = taskId) { progress, etaInSeconds, line ->
+            val speedMatch = speedRegex.find(line)
+            val speed = speedMatch?.value ?: ""
+            val etaStr = if (etaInSeconds > 0) "${etaInSeconds}s" else ""
+            updateNotification(
+                title,
+                if (speed.isNotEmpty()) "$speed • ETA $etaStr" else "Downloading...",
+                progress.toInt(),
+            )
+            emitEvent(taskId, "downloading", progress.toDouble(), speed, etaStr)
+        }
+    }
+
+    private fun stripSubtitleArgs(args: List<String>): List<String> {
+        val valueFlags = setOf("--sub-langs", "--sub-format", "--sleep-subtitles")
+        val boolFlags = setOf("--write-subs", "--write-auto-subs", "--embed-subs")
+        val filtered = mutableListOf<String>()
+        var i = 0
+        while (i < args.size) {
+            val token = args[i]
+            when {
+                token in valueFlags -> {
+                    i += 2
+                }
+                token in boolFlags -> {
+                    i += 1
+                }
+                else -> {
+                    filtered.add(token)
+                    i += 1
+                }
+            }
+        }
+        return filtered
+    }
+
+    private fun formatByteSize(bytes: Long): String {
+        if (bytes <= 0L) return ""
+        val kb = 1024.0
+        val mb = kb * 1024.0
+        val gb = mb * 1024.0
+        return when {
+            bytes >= gb -> String.format(Locale.US, "%.2f GB", bytes / gb)
+            bytes >= mb -> String.format(Locale.US, "%.1f MB", bytes / mb)
+            bytes >= kb -> String.format(Locale.US, "%.0f KB", bytes / kb)
+            else -> "$bytes B"
+        }
     }
 
     private fun cancelTask(taskId: String) {
@@ -172,9 +391,10 @@ class DownloadForegroundService : Service() {
         percent: Double,
         speed: String,
         eta: String,
-        totalSize: String = ""
+        totalSize: String = "",
+        filePath: String? = null,
     ) {
-        val event = mapOf(
+        val event = mutableMapOf<String, Any>(
             "taskId" to taskId,
             "status" to status,
             "percent" to percent,
@@ -182,6 +402,9 @@ class DownloadForegroundService : Service() {
             "eta" to eta,
             "totalSize" to totalSize
         )
+        if (filePath != null) {
+            event["filePath"] = filePath
+        }
         progressListener?.invoke(event)
     }
 

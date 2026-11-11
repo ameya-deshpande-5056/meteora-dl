@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:media_library/media_library.dart';
 import 'package:path_provider/path_provider.dart';
+import '../services/native_bridge.dart';
 
 enum TaskStatus {
   queued,
@@ -122,8 +123,42 @@ class DownloadStateManager extends ChangeNotifier {
   static final DownloadStateManager instance = DownloadStateManager._internal();
   DownloadStateManager._internal();
 
+  static const _firstLaunchSetupKey = 'first_launch_setup_done';
+
   MeteoraDatabase? _database;
   bool _initialized = false;
+  DownloadLocationInfo _downloadLocation = DownloadLocationInfo.defaultLocation();
+
+  MeteoraDatabase? get database => _database;
+  DownloadLocationInfo get downloadLocation => _downloadLocation;
+  bool get isFirstLaunchSetupDone =>
+      _database?.getSetting(_firstLaunchSetupKey) == 'true';
+
+  Future<void> refreshDownloadLocation() async {
+    _downloadLocation = await NativeBridge.getDownloadLocation();
+    notifyListeners();
+  }
+
+  Future<DownloadLocationInfo?> pickDownloadLocation() async {
+    final picked = await NativeBridge.pickDownloadDirectory();
+    if (picked != null) {
+      _downloadLocation = picked;
+      notifyListeners();
+    }
+    return picked;
+  }
+
+  Future<DownloadLocationInfo> resetDownloadLocation() async {
+    final reset = await NativeBridge.resetDownloadLocation();
+    _downloadLocation = reset;
+    notifyListeners();
+    return reset;
+  }
+
+  void completeFirstLaunchSetup() {
+    _database?.setSetting(_firstLaunchSetupKey, 'true');
+    notifyListeners();
+  }
 
   final List<DownloadTask> _tasks = [];
   final List<MediaItem> _libraryItems = [];
@@ -187,6 +222,8 @@ class DownloadStateManager extends ChangeNotifier {
     required String eta,
     required String totalSize,
     required TaskStatus status,
+    String? filePath,
+    String? errorMessage,
   }) {
     final index = _tasks.indexWhere((t) => t.taskId == taskId);
     if (index != -1) {
@@ -196,6 +233,8 @@ class DownloadStateManager extends ChangeNotifier {
         etaText: eta,
         totalSizeText: totalSize,
         status: status,
+        filePath: filePath,
+        errorMessage: errorMessage,
       );
       _tasks[index] = updated;
 
@@ -206,28 +245,50 @@ class DownloadStateManager extends ChangeNotifier {
         eta: eta,
         totalSize: totalSize,
         status: status.name,
+        filePath: filePath,
       );
 
-      // If completed, add to library
-      if (status == TaskStatus.completed) {
+      // If completed, add video/audio items to library (avoid misindexing subtitles-only downloads)
+      if (status == TaskStatus.completed && !updated.formatLabel.startsWith('Subtitles Only')) {
+        final isAudioOnly =
+            updated.formatLabel.startsWith('Audio Only') || _isAudioPath(updated.filePath);
         final item = MediaItem(
           id: updated.taskId,
           title: updated.title,
           localFilePath: updated.filePath ?? '',
           thumbnailPath: updated.thumbnailUrl,
-          mediaType: updated.formatLabel.contains('Audio') ? LibraryMediaType.audio : LibraryMediaType.video,
+          mediaType: isAudioOnly ? LibraryMediaType.audio : LibraryMediaType.video,
           durationSeconds: 0,
           fileSizeBytes: 0,
           resolution: updated.formatLabel,
           addedAt: DateTime.now(),
         );
 
+        _libraryItems.removeWhere((existing) => existing.id == item.id);
         _libraryItems.insert(0, item);
         _database?.insertOrUpdateMediaItem(item);
       }
 
       notifyListeners();
     }
+  }
+
+  static bool _isAudioPath(String? path) {
+    if (path == null || path.isEmpty) return false;
+    final lower = path.toLowerCase();
+    return lower.endsWith('.m4a') ||
+        lower.endsWith('.mp3') ||
+        lower.endsWith('.opus') ||
+        lower.endsWith('.ogg') ||
+        lower.endsWith('.flac') ||
+        lower.endsWith('.wav') ||
+        lower.endsWith('.aac');
+  }
+
+  void clearCompletedTasks() {
+    _tasks.removeWhere((t) => t.status == TaskStatus.completed);
+    _database?.clearCompletedTasks();
+    notifyListeners();
   }
 
   void cancelTask(String taskId) {

@@ -70,6 +70,13 @@ class MeteoraDatabase {
     _db.execute('''
       CREATE INDEX IF NOT EXISTS idx_media_added ON media_items(added_at DESC);
     ''');
+
+    _db.execute('''
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    ''');
   }
 
   // ===================== DOWNLOAD TASKS CRUD =====================
@@ -116,14 +123,16 @@ class MeteoraDatabase {
     required String eta,
     required String totalSize,
     required String status,
+    String? filePath,
   }) {
     final stmt = _db.prepare('''
       UPDATE download_tasks
-      SET progress_percent = ?, speed_text = ?, eta_text = ?, total_size_text = ?, status = ?
+      SET progress_percent = ?, speed_text = ?, eta_text = ?, total_size_text = ?, status = ?,
+          file_path = COALESCE(?, file_path)
       WHERE task_id = ?;
     ''');
 
-    stmt.execute([percent, speed, eta, totalSize, status, taskId]);
+    stmt.execute([percent, speed, eta, totalSize, status, filePath, taskId]);
     stmt.dispose();
   }
 
@@ -327,6 +336,31 @@ class MeteoraDatabase {
   void deleteMediaItem(String id) {
     final stmt = _db.prepare('DELETE FROM media_items WHERE id = ?;');
     stmt.execute([id]);
+    stmt.dispose();
+  }
+
+  // ===================== APP SETTINGS CRUD =====================
+
+  String? getSetting(String key) {
+    final stmt = _db.prepare('SELECT value FROM app_settings WHERE key = ?;');
+    final result = stmt.select([key]);
+    stmt.dispose();
+    if (result.isEmpty) return null;
+    return result.first['value'] as String?;
+  }
+
+  void setSetting(String key, String value) {
+    final stmt = _db.prepare('''
+      INSERT INTO app_settings (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+    ''');
+    stmt.execute([key, value]);
+    stmt.dispose();
+  }
+
+  void deleteSetting(String key) {
+    final stmt = _db.prepare('DELETE FROM app_settings WHERE key = ?;');
+    stmt.execute([key]);
     stmt.dispose();
   }
 

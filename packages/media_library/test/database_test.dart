@@ -131,5 +131,37 @@ void main() {
       expect(remaining.length, equals(1));
       expect(remaining.first.taskId, equals('t2'));
     });
+
+    test('persists filePath on progress completion and manages app_settings', () {
+      final task = DownloadTaskRecord(
+        taskId: 'task_fp',
+        url: 'https://example.com/v.mp4',
+        title: 'Video',
+        formatLabel: 'Video + Audio',
+        createdAt: DateTime.now(),
+      );
+      db.insertOrUpdateTask(task);
+      db.updateTaskProgress(
+        taskId: 'task_fp',
+        percent: 100.0,
+        speed: '0 B/s',
+        eta: 'Done',
+        totalSize: '25.0 MB',
+        status: 'completed',
+        filePath: 'content://media/external_primary/downloads/42',
+      );
+      expect(
+        db.getTask('task_fp')?.filePath,
+        equals('content://media/external_primary/downloads/42'),
+      );
+
+      expect(db.getSetting('theme_mode'), isNull);
+      db.setSetting('theme_mode', 'amoled');
+      expect(db.getSetting('theme_mode'), equals('amoled'));
+      db.setSetting('theme_mode', 'dark');
+      expect(db.getSetting('theme_mode'), equals('dark'));
+      db.deleteSetting('theme_mode');
+      expect(db.getSetting('theme_mode'), isNull);
+    });
   });
 }

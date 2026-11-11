@@ -53,12 +53,15 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Android Media3 (ExoPlayer) native playback interface -->
-        <activity
-            android:name=".player.PlayerActivity"
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
-            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <meta-data
             android:name="flutterEmbedding"
@@ -69,6 +72,18 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="video/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="audio/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="text/*" />
         </intent>
     </queries>
 </manifest>

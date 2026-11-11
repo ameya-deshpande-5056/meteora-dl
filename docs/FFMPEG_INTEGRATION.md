@@ -23,7 +23,7 @@ ffmpeg -y \
 ```
 
 - `-c copy`: Copies packet data directly from input demuxers to output muxers without decoding or encoding. A 1GB 4K file muxes in under 1.5 seconds.
-- `-movflags +faststart`: Relocates the `moov` atom to the beginning of the MP4 file, allowing immediate playback in Android Media3 without waiting for the full file to buffer.
+- `-movflags +faststart`: Relocates the `moov` atom to the beginning of the MP4 file, allowing immediate playback in external media players (such as VLC or mpv) without waiting for the full file to buffer.
 
 ---
 

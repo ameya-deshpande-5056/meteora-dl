@@ -58,3 +58,18 @@ For separate video and audio streams:
 --postprocessor-args "ffmpeg:-c copy"
 ```
 This forces FFmpeg to mux without transcoding, saving CPU time, battery, and preventing generation loss.
+
+---
+
+## 5. Runtime Defaults, Download Modes & Error Recovery
+
+- **Runtime Defaults (`NativeEngineManager.applyRuntimeDefaults`)**:
+  - Injects `--cache-dir <app_cache>/ytdlp-cache` (overriding `youtubedl-android`'s `--no-cache-dir` fallback so EJS challenge scripts persist across invocations).
+  - Enables `--remote-components ejs:github` when not explicitly overridden, ensuring updated `yt-dlp` versions can download current solver bundles (`yt.solver.lib.min.js`).
+  - Adds `--force-ipv4` when an active non-loopback IPv4 interface is detected (`hasActiveIpv4Interface()`), preventing IPv4/IPv6 dual-stack 403 mismatches on `googlevideo.com`.
+- **Simple Download Modes (`SimpleDownloadCommandBuilder`)**:
+  - Builds typed argument lists for `Video + Audio`, `Video Only`, `Audio Only` (`-x`), and `Subtitles Only` (`--skip-download`) with optional creator (`--write-subs`), auto-caption (`--write-auto-subs`), `--embed-subs`, `--sub-format`, and `--sleep-subtitles 2`.
+- **Resilient Retry & Fallback Recovery (`DownloadForegroundService`)**:
+  - Configures `--retries 5`, `--fragment-retries 10`, and `--extractor-retries 3`.
+  - **403 Fallback**: On `HTTP Error 403` / `unable to download video data`, deletes `.part` and `.ytdl` staging files, adapts `-f <id>` to `bestaudio/best`, `bestvideo+bestaudio/best`, or `bestvideo/best`, adds `--extractor-args youtube:player_client=tv,android_vr,visionos` and `--force-ipv4`, and retries.
+  - **429 Subtitle Fallback**: If YouTube `timedtext` rate-limits subtitles during a media download, strips subtitle flags (`stripSubtitleArgs`) and continues saving the media stream.

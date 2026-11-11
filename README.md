@@ -20,27 +20,26 @@
 
 ## 📖 Overview
 
-**Meteora (MeteoraDL)** is an elegant, native Android media downloader engineered for performance, reliability, and privacy. Built with **Flutter**, **Kotlin**, **embedded CPython 3**, **yt-dlp**, **FFmpeg**, and **Android Media3 (ExoPlayer)**, Meteora brings full-fidelity stream extraction and background downloading directly to your device — with no Termux, root access, or external servers required.
+**Meteora (MeteoraDL)** is an elegant, native Android media downloader engineered for performance, reliability, and privacy. Built with **Flutter**, **Kotlin**, **embedded CPython 3**, **yt-dlp**, **QuickJS-NG / EJS**, and **FFmpeg**, Meteora brings full-fidelity stream extraction and background downloading directly to your device — with no Termux, root access, or external servers required.
 
 ---
 
 ## ✨ Features
 
 - 🎥 **1,000+ Supported Websites**: Seamless extraction and downloading from YouTube, Instagram Reels, TikTok, Twitter/X, Bilibili, Reddit, SoundCloud, Twitch, Vimeo, Facebook, and hundreds more via the embedded `yt-dlp` engine.
-- 🐍 **Embedded Python 3 & NDK Runtime**: Bundles CPython 3 and `yt-dlp` directly into the APK via the Android NDK (`youtubedl-android`).
+- 🐍 **Embedded Python 3, NDK Runtime & EJS Caching**: Bundles CPython 3, `yt-dlp`, and `QuickJS-NG` via `youtubedl-android`, configures a persistent `ytdlp-cache` directory with `--remote-components ejs:github` for player challenge solving, and automatically applies fallback client/IPv4 recovery on `HTTP 403` and `HTTP 429` errors.
 - 🎞️ **Direct Lossless Stream Copy (FFmpeg)**: Embedded `libffmpeg.so` automatically merges separate high-resolution video streams (1080p, 1440p, 4K) and audio streams using `-c copy` without re-encoding, preserving exact original quality while saving battery.
-- 🧠 **Intelligent Format Selection**: Analyzes your device's screen resolution, refresh rate, and hardware codec support (AV1, VP9, HEVC, AVC, Opus, AAC) alongside network status (unmetered Wi-Fi vs. metered mobile data) and storage headroom.
-- ⚡ **Persistent Background Downloads**: Powered by a robust Kotlin `DownloadForegroundService` with notification progress bars, real-time speed (MB/s), ETA calculations, and Wi-Fi/wake locks to prevent OEM task termination.
+- 🎛️ **Simple Mode, Codec & Subtitle Picker**: Choose directly between **Video + Audio**, **Video Only**, **Audio Only**, and **Subtitles Only**, with dedicated pickers for video resolution/framerate/codec (`AV1`, `VP9`, `H.265`, `H.264`), audio bitrate/codec (`Opus`, `AAC`), and creator or auto-generated subtitle languages (alongside hardware-aware capability detection in `media_engine`).
+- ⚡ **Persistent Background Downloads**: Powered by a robust Kotlin `DownloadForegroundService` with notification progress bars, real-time speed (MB/s), ETA calculations, retries, and Wi-Fi/wake locks to prevent OEM task termination.
 - 🔄 **In-App Over-The-Air Engine Updates**: Update the embedded `yt-dlp` binary dynamically from official upstream channels directly within the app without waiting for an APK release.
 - 🎨 **Material 3 Expressive & Liquid Glass**:
-  - **Dynamic Theming (Monet)**: Adapts to your device's wallpaper palette on Android 12+.
-  - **True AMOLED Black Mode**: Pure `#000000` theme for OLED battery efficiency.
-  - **Restrained Liquid Glass**: Subtle translucency and depth on bottom navigation bars, search headers, and action sheets with accessibility fallbacks.
+  - **Clean Theme Picker (`Choose theme`)**: Switch between **Follow System**, **Light Mode**, **Dark Mode**, and **AMOLED Black** (`#000000`) with preview swatches persisted in SQLite, plus Android 12+ **Dynamic Color (Monet)** support.
+  - **Frosted Liquid Glass**: Real-time `BackdropFilter` blur, directional sheen, specular rim borders, floating bottom dock / tablet navigation rail, glass search/URL bars, and glass modal dialogs/sheets with automatic reduced-motion fallbacks.
 - 📋 **Smart Clipboard & Android Share Sheet**:
   - Detects copied media links on app resume with a floating, non-intrusive one-tap inspection action.
   - Fully integrated with Android's system Share menu from any browser or app.
-- 📂 **Scoped Storage & Android MediaStore**: Android 10-15 compliant; automatically indexes finished downloads into `/Movies/Meteora` and `/Music/Meteora` so they appear instantly in your Gallery and Music players.
-- 🎵 **Integrated Android Media3 Player**: Built-in ExoPlayer native playback activity with full audio and video playback controls.
+- 📂 **Accessible Public Downloads & Custom Folders (SAF)**: Android 10–15 compliant; publishes completed downloads directly to Android's public **Download** folder (`MediaStore.Downloads` / `Environment.DIRECTORY_DOWNLOADS`) by default or to any user-selected directory via Android's **Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`)**, configured at first launch or anytime in Settings.
+- ▶️ **External Media Player Integration**: Opens finished videos, audio tracks, and subtitle files in your preferred installed player (VLC, mpv, MX Player, etc.) via Android's `ACTION_VIEW` chooser and `FileProvider`.
 - 🔒 **Zero Shell Concatenation & Privacy**: Executes commands through structured, typed argument vectors with no shell interpolation. Completely ad-free, tracker-free, and privacy-respecting.
 
 ---
@@ -50,43 +49,45 @@
 ```mermaid
 flowchart TD
     subgraph UI_Layer ["Flutter UI Layer (Dart)"]
-        UI_Home["Home (URL Input, Share Target)"]
+        UI_Home["Home (URL Input, Mode/Codec/Subtitle Picker)"]
         UI_Down["Downloads (Queue, Progress, Controls)"]
-        UI_Lib["Media Library (Browser, Collections)"]
-        UI_Set["Settings (Update Channels, Codecs)"]
+        UI_Lib["Media Library (Browser, Search, Open)"]
+        UI_Set["Settings (Theme Picker, Download Folder, Updates)"]
     end
 
     subgraph State_Layer ["Domain & Storage Layer"]
-        Engine["Media Engine (Extraction, Format Models)"]
-        IntelligentSelector["Intelligent Format Selector"]
-        DB[(Drift / SQLite Database)]
+        Engine["Media Engine (Extraction, DownloadMode, Format Models)"]
+        CmdBuilder["SimpleDownloadCommandBuilder"]
+        DB[(SQLite Database & App Settings)]
     end
 
     subgraph Native_Layer ["Android Native Engine (Kotlin & NDK)"]
         Bridge["Flutter Platform Method/Event Channel"]
-        FGService["DownloadForegroundService (Persistent)"]
-        NativeEngine["NativeEngineManager"]
-        PythonNDK["Embedded CPython 3 + yt-dlp"]
+        FGService["DownloadForegroundService (Retries & 403/429 Recovery)"]
+        NativeEngine["NativeEngineManager (Cache & ejs:github)"]
+        PythonNDK["Embedded CPython 3 + yt-dlp + QuickJS"]
         FFmpegNDK["Embedded FFmpeg (libffmpeg.so)"]
-        MediaStoreHandler["MediaStore & SAF Storage Handler"]
-        Media3Player["Android Media3 (ExoPlayer)"]
+        StorageMgr["DownloadStorageManager (MediaStore.Downloads & SAF)"]
+        ExternalPlayer["External Player Chooser (ACTION_VIEW + FileProvider)"]
     end
 
     UI_Home --> Engine
-    UI_Home --> IntelligentSelector
+    UI_Home --> CmdBuilder
     UI_Down --> DB
     UI_Lib --> DB
+    UI_Set --> DB
 
     Engine --> Bridge
-    IntelligentSelector --> Bridge
+    CmdBuilder --> Bridge
     Bridge --> FGService
     Bridge --> NativeEngine
-    Bridge --> MediaStoreHandler
-    Bridge --> Media3Player
+    Bridge --> StorageMgr
+    Bridge --> ExternalPlayer
 
     NativeEngine --> PythonNDK
     NativeEngine --> FFmpegNDK
     FGService --> NativeEngine
+    FGService --> StorageMgr
 ```
 
 ---
@@ -161,7 +162,7 @@ Precompiled APKs for each release are published under [**Releases**](https://git
 ## 🛡️ Security & Privacy
 
 - **Zero Command Injection**: Meteora does not pass raw strings to a shell. All process execution is conducted through typed parameter lists using `YoutubeDLRequest` and native JNI bindings.
-- **Strict Android Scoped Storage**: Private downloads are staged in sandboxed app directories and explicitly published through the Android `ContentResolver` to system MediaStore collections.
+- **Strict Android Scoped Storage**: Downloads are staged privately inside app files and explicitly published through Android's `ContentResolver` to public `MediaStore.Downloads` or a user-granted Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`) directory, and opened via `FileProvider` read grants (`FLAG_GRANT_READ_URI_PERMISSION`).
 - **No CAPTCHA Bypassing**: Meteora respects authentication firewalls and does not attempt to solve bot-gates or circumvent platform security measures.
 - **No Trackers**: Meteora contains zero third-party analytics SDKs, advertising libraries, or telemetry trackers.
 

@@ -2,11 +2,11 @@
 
 ## Responsibilities
 The `android/` subsystem contains the Android-native integration layer written in **Kotlin**. It is responsible for:
-1. Native process execution of `yt-dlp` and JavaScript engines (`deno`, `quickjs-ng`).
-2. Long-running background downloads via `DownloadForegroundService`.
-3. Persistent foreground notification with live progress, pause, resume, and cancel actions.
-4. Scoped Storage / MediaStore API integration for writing media to public Movies/Music folders.
-5. Android Media3 (ExoPlayer) playback bridge and hardware codec capability detection.
+1. Native process execution of `yt-dlp`, embedded CPython 3 (`youtubedl-android`), and JavaScript engines (`deno`, `quickjs-ng`), with cached `ejs:github` components via `NativeEngineManager`.
+2. Long-running background downloads via `DownloadForegroundService` with retries and automatic `HTTP 403` / `HTTP 429` fallback recovery.
+3. Persistent foreground notification with live progress, speed/ETA, and cancel actions.
+4. Scoped Storage integration via `DownloadStorageManager`: publishes to Android's public `Downloads` directory (`MediaStore.Downloads` / `Environment.DIRECTORY_DOWNLOADS`) or user-chosen SAF (`ACTION_OPEN_DOCUMENT_TREE`) folders.
+5. External media player handoff (`Intent.ACTION_VIEW` chooser + `FileProvider`) and hardware codec capability detection (`DeviceCapabilityDetector`).
 
 ## Engineering Standards
 - **Kotlin 2.0+**: Idiomatic Kotlin with Coroutines and StateFlow.

@@ -3,10 +3,12 @@ import 'package:media_engine/media_engine.dart';
 import 'package:package_manager/package_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/native_bridge.dart';
+import '../state/download_state.dart';
 import '../state/theme_manager.dart';
 import '../theme/app_shapes.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
+import '../widgets/liquid_glass_container.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -36,6 +38,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadDeviceCapabilities();
+    DownloadStateManager.instance.refreshDownloadLocation();
+  }
+
+  Future<void> _pickDownloadDirectory() async {
+    final picked = await DownloadStateManager.instance.pickDownloadLocation();
+    if (picked != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download location set to ${picked.displayPath}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _resetDownloadLocation() async {
+    final reset = await DownloadStateManager.instance.resetDownloadLocation();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download location reset to ${reset.displayPath}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _loadDeviceCapabilities() async {
@@ -134,57 +161,211 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  IconData _themeModeIcon(AppThemeMode mode) {
+    switch (mode) {
+      case AppThemeMode.system:
+        return Icons.brightness_auto_outlined;
+      case AppThemeMode.light:
+        return Icons.light_mode_outlined;
+      case AppThemeMode.dark:
+        return Icons.dark_mode_outlined;
+      case AppThemeMode.amoled:
+        return Icons.contrast_rounded;
+    }
+  }
+
+  void _showThemePickerDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final currentMode = ThemeManager.instance.currentMode;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+          child: LiquidGlassContainer(
+            padding: const EdgeInsets.only(top: AppSpacing.xl, bottom: AppSpacing.md),
+            borderRadius: AppShapes.extraLarge,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                  child: Text(
+                    'Choose theme',
+                    style: theme.textTheme.headlineSmall,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                ...AppThemeMode.values.map((mode) {
+                  final isSelected = currentMode == mode;
+                  return InkWell(
+                    onTap: () {
+                      ThemeManager.instance.setThemeMode(mode);
+                      Navigator.pop(dialogContext);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xl,
+                        vertical: AppSpacing.md,
+                      ),
+                      child: Row(
+                        children: [
+                          _ThemePreviewSwatch(mode: mode),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  mode.label,
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                  ),
+                                ),
+                                Text(
+                                  mode.description,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Icon(
+                            isSelected
+                                ? Icons.radio_button_checked_rounded
+                                : Icons.radio_button_off_rounded,
+                            color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: AppSpacing.xs),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
+      extendBodyBehindAppBar: true,
+      appBar: const LiquidGlassAppBar(
+        title: Text('Settings'),
       ),
-      body: SingleChildScrollView(
-        padding: AppSpacing.screenPadding,
-        child: Column(
+      body: LiquidGlassBackground(
+        child: SafeArea(
+          bottom: false,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              MediaQuery.paddingOf(context).bottom + 96,
+            ),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // 1. Appearance Section
             _buildSectionHeader('Appearance', context),
             const SizedBox(height: AppSpacing.sm),
-            Card(
-              child: Padding(
-                padding: AppSpacing.cardPadding,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Theme Mode', style: theme.textTheme.titleSmall),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'Choose between standard light/dark or pure black for OLED displays.',
-                      style: theme.textTheme.bodySmall,
+            ListenableBuilder(
+              listenable: ThemeManager.instance,
+              builder: (context, _) {
+                final currentMode = ThemeManager.instance.currentMode;
+                return Card(
+                  child: ListTile(
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(AppShapes.medium),
+                      ),
+                      child: Icon(
+                        _themeModeIcon(currentMode),
+                        color: colorScheme.onPrimaryContainer,
+                      ),
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    ListenableBuilder(
-                      listenable: ThemeManager.instance,
-                      builder: (context, _) {
-                        return SizedBox(
-                          width: double.infinity,
-                          child: SegmentedButton<AppThemeMode>(
-                            segments: const [
-                              ButtonSegment(value: AppThemeMode.system, label: Text('System')),
-                              ButtonSegment(value: AppThemeMode.light, label: Text('Light')),
-                              ButtonSegment(value: AppThemeMode.dark, label: Text('Dark')),
-                              ButtonSegment(value: AppThemeMode.amoled, label: Text('AMOLED')),
-                            ],
-                            selected: {ThemeManager.instance.currentMode},
-                            onSelectionChanged: (set) => ThemeManager.instance.setThemeMode(set.first),
+                    title: const Text('Theme'),
+                    subtitle: Text(currentMode.label),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _showThemePickerDialog(context),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            // 2. Storage & Download Location Section
+            _buildSectionHeader('Storage', context),
+            const SizedBox(height: AppSpacing.sm),
+            ListenableBuilder(
+              listenable: DownloadStateManager.instance,
+              builder: (context, _) {
+                final location = DownloadStateManager.instance.downloadLocation;
+                return Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: colorScheme.secondaryContainer,
+                            borderRadius: BorderRadius.circular(AppShapes.medium),
                           ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
+                          child: Icon(
+                            Icons.folder_outlined,
+                            color: colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                        title: const Text('Download Location'),
+                        subtitle: Text(
+                          location.isCustom
+                              ? location.displayPath
+                              : '${location.displayPath} (Default)',
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: _pickDownloadDirectory,
+                      ),
+                      if (location.isCustom) ...[
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: const Icon(Icons.restore_rounded),
+                          title: const Text('Reset to Default Folder'),
+                          subtitle: const Text('Save downloads to Internal Storage/Download'),
+                          onTap: _resetDownloadLocation,
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: AppSpacing.xl),
 
@@ -408,6 +589,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: AppSpacing.xxl),
           ],
         ),
+        ),
+        ),
       ),
     );
   }
@@ -446,6 +629,61 @@ class _CodecChip extends StatelessWidget {
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       backgroundColor: isSupported ? colorScheme.surfaceContainerHighest : colorScheme.surfaceContainerLow,
+    );
+  }
+}
+
+class _ThemePreviewSwatch extends StatelessWidget {
+  final AppThemeMode mode;
+
+  const _ThemePreviewSwatch({required this.mode});
+
+  @override
+  Widget build(BuildContext context) {
+    final outlineColor = Theme.of(context).colorScheme.outlineVariant;
+
+    if (mode == AppThemeMode.system) {
+      return Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: outlineColor, width: 1.2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: const Row(
+          children: [
+            Expanded(child: ColoredBox(color: Color(0xFFF5F7FA))),
+            Expanded(child: ColoredBox(color: Color(0xFF1A1F29))),
+          ],
+        ),
+      );
+    }
+
+    final Color fillColor;
+    switch (mode) {
+      case AppThemeMode.light:
+        fillColor = const Color(0xFFF8FAFC);
+        break;
+      case AppThemeMode.dark:
+        fillColor = const Color(0xFF1E2430);
+        break;
+      case AppThemeMode.amoled:
+        fillColor = const Color(0xFF000000);
+        break;
+      case AppThemeMode.system:
+        fillColor = const Color(0xFF1E2430);
+        break;
+    }
+
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: fillColor,
+        shape: BoxShape.circle,
+        border: Border.all(color: outlineColor, width: 1.2),
+      ),
     );
   }
 }

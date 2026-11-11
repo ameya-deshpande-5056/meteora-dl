@@ -33,11 +33,13 @@ yt-dlp --js-runtimes "deno:/data/user/0/dev.meteora/files/packages/active/deno/d
        --remote-components ejs:github
 ```
 
-### Using QuickJS-NG:
+### Using QuickJS-NG (Embedded Default in `youtubedl-android` + `NativeEngineManager`):
 ```bash
-yt-dlp --js-runtimes "quickjs:/data/user/0/dev.meteora/files/packages/active/quickjs/qjs" \
+yt-dlp --js-runtimes "quickjs:/path/to/libqjs.so" \
+       --cache-dir "/data/user/0/<app_id>/cache/ytdlp-cache" \
        --remote-components ejs:github
 ```
+> Note: `youtubedl-android` (`0.18.1`) injects `--no-cache-dir` unless `--cache-dir` is explicitly provided. `NativeEngineManager` sets `--cache-dir` to `cacheDir/ytdlp-cache` and adds `--remote-components ejs:github` on every execution so updated `yt-dlp` releases can fetch and reuse current EJS solver scripts (`yt.solver.lib.min.js`) rather than falling back to older bundled scripts and failing `n`-challenge solving.
 
 ---
 

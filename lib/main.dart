@@ -9,6 +9,7 @@ import 'services/native_bridge.dart';
 import 'state/download_state.dart';
 import 'state/theme_manager.dart';
 import 'widgets/adaptive_scaffold.dart';
+import 'widgets/first_launch_setup_dialog.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +25,7 @@ void main() async {
   );
 
   await DownloadStateManager.instance.init();
-  NativeBridge.requestPermissions();
+  ThemeManager.instance.init(DownloadStateManager.instance.database);
 
   runApp(const MeteoraDLApp());
 }
@@ -63,11 +64,34 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
+  bool _setupPromptScheduled = false;
 
   @override
   void initState() {
     super.initState();
     _listenToDownloadEvents();
+    _handleFirstLaunchSetup();
+  }
+
+  void _handleFirstLaunchSetup() {
+    if (!DownloadStateManager.instance.isFirstLaunchSetupDone) {
+      if (_setupPromptScheduled) return;
+      _setupPromptScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const FirstLaunchSetupDialog(),
+        );
+      });
+    } else {
+      NativeBridge.getPermissionStatus().then((status) {
+        if (!status.allGranted) {
+          NativeBridge.requestPermissions();
+        }
+      });
+    }
   }
 
   void _listenToDownloadEvents() {
@@ -79,6 +103,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         final speed = event['speed'] as String? ?? '';
         final eta = event['eta'] as String? ?? '';
         final totalSize = event['totalSize'] as String? ?? '';
+        final filePath = event['filePath'] as String?;
 
         TaskStatus status = TaskStatus.downloading;
         if (statusStr == 'completed') {
@@ -96,6 +121,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           eta: eta,
           totalSize: totalSize,
           status: status,
+          filePath: filePath,
+          errorMessage: status == TaskStatus.error && eta.isNotEmpty ? eta : null,
         );
       },
       onError: (_) {},

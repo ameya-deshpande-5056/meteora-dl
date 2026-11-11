@@ -1,6 +1,6 @@
 # AGENTS.md — Canonical Engineering & AI Guidelines for Meteora
 
-Welcome to **Meteora**, a lightweight, open-source Android media downloader powered by **yt-dlp**, **Flutter**, **Kotlin**, **Deno** / **QuickJS-NG**, **FFmpeg/FFprobe**, **Drift/SQLite**, and **Android Media3**.
+Welcome to **Meteora**, a lightweight, open-source Android media downloader powered by **yt-dlp**, **Flutter**, **Kotlin**, **Deno** / **QuickJS-NG**, **FFmpeg/FFprobe**, **SQLite (`sqlite3`)**, and Android's external media player integration (`Intent.ACTION_VIEW` + `FileProvider`).
 
 This document is the **single source of truth** for all human and AI agents working in this repository. All other agent instruction files (`CLAUDE.md`, `GEMINI.md`, `.cursor/rules/`, `.github/copilot-instructions.md`) must refer to this document.
 
@@ -28,18 +28,18 @@ meteora-dl/
    - Must never directly invoke shell commands or manipulate raw OS processes.
    - Communicates with domain packages (`media_engine`, `package_manager`, `media_library`) and native services via typed repository interfaces and platform channels.
 2. **Media Engine (`packages/media_engine`)**:
-   - Models extraction requests, formats, audio/video streams, and thumbnails.
+   - Models extraction requests, formats, audio/video streams, subtitle tracks, thumbnails, and simplified `DownloadMode` builders (`SimpleDownloadCommandBuilder`).
    - Contains the **Intelligent Format Selection Engine** (analyzes screen resolution, hardware codec compatibility, storage, network metered status).
 3. **Package Update Manager (`packages/package_manager`)**:
    - Manages standalone updates for `yt-dlp`, `yt-dlp-ejs`, `deno`, `quickjs-ng`, `ffmpeg`, and `ffprobe`.
    - Fetches from official GitHub releases, validates SHA-256 checksums, downloads into staging directories, performs atomic swap, and retains rollback capability.
 4. **Media Library (`packages/media_library`)**:
-   - Manages indexed downloaded media, metadata persistence via Drift, tags/collections, and thumbnail caching.
+   - Manages indexed downloaded media, metadata persistence via SQLite (`MeteoraDatabase`), app settings (`app_settings`), tags/collections, and thumbnail caching.
 5. **Android Native Engine (`android/`)**:
-   - `DownloadForegroundService`: Persistent execution with notification controls, wake locks, crash recovery.
-   - Secure process execution via `ProcessBuilder` (no shell interpolation).
-   - Native MediaStore & SAF integration for Android 10-15 scoped storage.
-   - Android Media3 (ExoPlayer) native playback interface.
+   - `DownloadForegroundService`: Persistent execution with notification controls, wake locks, crash/error recovery (`403`/`429` fallbacks), and retry handling.
+   - Secure process execution via `ProcessBuilder` and typed `YoutubeDLRequest` argument vectors (no shell interpolation), with cached `ejs:github` solver components (`--cache-dir`).
+   - Native `DownloadStorageManager` (`MediaStore.Downloads` & SAF `ACTION_OPEN_DOCUMENT_TREE`) integration for Android 10-15 scoped storage.
+   - External media player launch via `Intent.ACTION_VIEW` chooser + `FileProvider`.
 
 ---
 
@@ -54,7 +54,7 @@ meteora-dl/
   - Lightweight alternative: `quickjs-ng` (`qjs`) for minimal footprint and low RAM overhead.
   - Security rule: JS runtimes must run sandboxed without arbitrary network or host file permissions.
 - **Media Merging**: FFmpeg stream copy (`-c copy`) without re-encoding unless format conversion is explicitly requested.
-- **Storage**: Drift (SQLite) with encrypted or protected local schema, MediaStore API for public directories.
+- **Storage**: SQLite (`MeteoraDatabase`) in protected app storage, plus `MediaStore.Downloads` and Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`) for public and user-selected directories.
 
 ---
 

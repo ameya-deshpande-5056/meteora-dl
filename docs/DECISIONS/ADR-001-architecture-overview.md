@@ -1,7 +1,7 @@
 # ADR-001: Modular Subsystem Boundaries and Multi-Package Layout
 
 ## Status
-Accepted
+Accepted (media playback and storage details partially superseded by [ADR-006](ADR-006-external-player-and-public-saf-storage.md) and [ADR-007](ADR-007-simple-download-selector-and-resilience.md))
 
 ## Context
 Meteora requires a clean separation of concerns among the Flutter presentation UI, domain business logic (format selection, download queue, library management), and native Android capabilities (process execution, foreground service, MediaStore, ExoPlayer/Media3). Combining all logic into a monolithic `lib/` directory would introduce tight coupling, hinder automated testing, and make standalone component reuse impossible.
