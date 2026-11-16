@@ -385,43 +385,46 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           final entry = _extractedPlaylist!.entries[index];
                           final isSelected = _selectedPlaylistEntryIds.contains(entry.id);
 
-                          return CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: isSelected,
-                            onChanged: (val) {
-                              setSheetState(() {
-                                if (val == true) {
-                                  _selectedPlaylistEntryIds.add(entry.id);
-                                } else {
-                                  _selectedPlaylistEntryIds.remove(entry.id);
-                                }
-                              });
-                              setState(() {});
-                            },
-                            title: Text(
-                              entry.title,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          return Material(
+                            type: MaterialType.transparency,
+                            child: CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: isSelected,
+                              onChanged: (val) {
+                                setSheetState(() {
+                                  if (val == true) {
+                                    _selectedPlaylistEntryIds.add(entry.id);
+                                  } else {
+                                    _selectedPlaylistEntryIds.remove(entry.id);
+                                  }
+                                });
+                                setState(() {});
+                              },
+                              title: Text(
+                                entry.title,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              entry.durationSeconds != null
-                                  ? '${entry.durationSeconds! ~/ 60}:${(entry.durationSeconds! % 60).toString().padLeft(2, '0')}'
-                                  : 'Media Stream',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                            secondary: Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: colorScheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(AppShapes.extraSmall),
+                              subtitle: Text(
+                                entry.durationSeconds != null
+                                    ? '${entry.durationSeconds! ~/ 60}:${(entry.durationSeconds! % 60).toString().padLeft(2, '0')}'
+                                    : 'Media Stream',
+                                style: theme.textTheme.bodySmall,
                               ),
-                              child: Icon(
-                                Icons.video_collection_outlined,
-                                color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                              secondary: Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerHigh,
+                                  borderRadius: BorderRadius.circular(AppShapes.extraSmall),
+                                ),
+                                child: Icon(
+                                  Icons.video_collection_outlined,
+                                  color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                                ),
                               ),
                             ),
                           );
@@ -859,23 +862,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             itemBuilder: (_, index) {
                               final track = visibleTracks[index];
                               final checked = tempSelected.contains(track);
-                              return CheckboxListTile(
-                                contentPadding: EdgeInsets.zero,
-                                value: checked,
-                                title: Text(track.displayLabel),
-                                subtitle: Text(
-                                  track.isAutoGenerated ? 'Auto-generated captions' : 'Creator subtitles',
-                                  style: theme.textTheme.bodySmall,
+                              return Material(
+                                type: MaterialType.transparency,
+                                child: CheckboxListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  value: checked,
+                                  title: Text(track.displayLabel),
+                                  subtitle: Text(
+                                    track.isAutoGenerated ? 'Auto-generated captions' : 'Creator subtitles',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                  onChanged: (val) {
+                                    setSheetState(() {
+                                      if (val == true) {
+                                        if (!tempSelected.contains(track)) tempSelected.add(track);
+                                      } else {
+                                        tempSelected.remove(track);
+                                      }
+                                    });
+                                  },
                                 ),
-                                onChanged: (val) {
-                                  setSheetState(() {
-                                    if (val == true) {
-                                      if (!tempSelected.contains(track)) tempSelected.add(track);
-                                    } else {
-                                      tempSelected.remove(track);
-                                    }
-                                  });
-                                },
                               );
                             },
                           ),

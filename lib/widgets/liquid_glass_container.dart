@@ -109,7 +109,11 @@ class LiquidGlassContainer extends StatelessWidget {
             stops: const [0.0, 1.0],
           ),
         ),
-        child: child,
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: radius,
+          child: child,
+        ),
       ),
     );
 

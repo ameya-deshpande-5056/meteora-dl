@@ -290,28 +290,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     return LiquidGlassContainer(
                       padding: EdgeInsets.zero,
                       borderRadius: AppShapes.large,
-                      child: ListTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppShapes.large),
-                        ),
-                        leading: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(
-                              AppShapes.medium,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        borderRadius: BorderRadius.circular(AppShapes.large),
+                        child: ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppShapes.large),
+                          ),
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(
+                                AppShapes.medium,
+                              ),
+                            ),
+                            child: Icon(
+                              _themeModeIcon(currentMode),
+                              color: colorScheme.onPrimaryContainer,
                             ),
                           ),
-                          child: Icon(
-                            _themeModeIcon(currentMode),
-                            color: colorScheme.onPrimaryContainer,
-                          ),
+                          title: const Text('Theme'),
+                          subtitle: Text(currentMode.label),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => _showThemePickerDialog(context),
                         ),
-                        title: const Text('Theme'),
-                        subtitle: Text(currentMode.label),
-                        trailing: const Icon(Icons.chevron_right_rounded),
-                        onTap: () => _showThemePickerDialog(context),
                       ),
                     );
                   },
@@ -328,54 +332,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     return LiquidGlassContainer(
                       padding: EdgeInsets.zero,
                       borderRadius: AppShapes.large,
-                      child: Column(
-                        children: [
-                          ListTile(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                AppShapes.large,
-                              ),
-                            ),
-                            leading: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: colorScheme.secondaryContainer,
-                                borderRadius: BorderRadius.circular(
-                                  AppShapes.medium,
-                                ),
-                              ),
-                              child: Icon(
-                                Icons.folder_outlined,
-                                color: colorScheme.onSecondaryContainer,
-                              ),
-                            ),
-                            title: const Text('Download Location'),
-                            subtitle: Text(
-                              location.isCustom
-                                  ? location.displayPath
-                                  : '${location.displayPath} (Default)',
-                            ),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: _pickDownloadDirectory,
-                          ),
-                          if (location.isCustom) ...[
-                            const Divider(height: 1),
+                      child: Material(
+                        type: MaterialType.transparency,
+                        borderRadius: BorderRadius.circular(AppShapes.large),
+                        child: Column(
+                          children: [
                             ListTile(
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(
                                   AppShapes.large,
                                 ),
                               ),
-                              leading: const Icon(Icons.restore_rounded),
-                              title: const Text('Reset to Default Folder'),
-                              subtitle: const Text(
-                                'Save downloads to Internal Storage/Download',
+                              leading: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: colorScheme.secondaryContainer,
+                                  borderRadius: BorderRadius.circular(
+                                    AppShapes.medium,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.folder_outlined,
+                                  color: colorScheme.onSecondaryContainer,
+                                ),
                               ),
-                              onTap: _resetDownloadLocation,
+                              title: const Text('Download Location'),
+                              subtitle: Text(
+                                location.isCustom
+                                    ? location.displayPath
+                                    : '${location.displayPath} (Default)',
+                              ),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: _pickDownloadDirectory,
                             ),
+                            if (location.isCustom) ...[
+                              const Divider(height: 1),
+                              ListTile(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppShapes.large,
+                                  ),
+                                ),
+                                leading: const Icon(Icons.restore_rounded),
+                                title: const Text('Reset to Default Folder'),
+                                subtitle: const Text(
+                                  'Save downloads to Internal Storage/Download',
+                                ),
+                                onTap: _resetDownloadLocation,
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     );
                   },
