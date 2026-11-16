@@ -23,7 +23,7 @@ enum PackageType {
     displayName: 'FFmpeg & FFprobe',
     repository: 'yt-dlp/FFmpeg-Builds',
     executableName: 'ffmpeg',
-    additionalExecutableNames: const ['ffprobe'],
+    additionalExecutableNames: ['ffprobe'],
   );
 
   /// Human-readable name shown in settings / update UI.
