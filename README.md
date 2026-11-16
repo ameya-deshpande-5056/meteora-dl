@@ -13,7 +13,7 @@
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.41+-02569B?logo=flutter&logoColor=white" alt="Flutter" /></a>
   <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.2+-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin" /></a>
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-7.0+-3DDC84?logo=android&logoColor=white" alt="Android" /></a>
-  <a href="https://github.com/meteora-app/meteora-dl/releases"><img src="https://img.shields.io/badge/Release-v0.0.2-orange.svg" alt="Release" /></a>
+  <a href="https://github.com/meteora-app/meteora-dl/releases"><img src="https://img.shields.io/badge/Release-v0.0.3-orange.svg" alt="Release" /></a>
 </p>
 
 ---
@@ -99,10 +99,10 @@ Precompiled APKs for each release are published under [**Releases**](https://git
 
 | Architecture | APK Filename | Target Devices | Size |
 | :--- | :--- | :--- | :--- |
-| **ARM64 (v8a)** *(Recommended)* | `meteora-v0.0.2-arm64-v8a.apk` | Most modern Android phones & tablets (2016+) | ~68 MB |
-| **ARM32 (v7a)** | `meteora-v0.0.2-armeabi-v7a.apk` | Older 32-bit Android phones | ~61 MB |
-| **x86_64** | `meteora-v0.0.2-x86_64.apk` | Android emulators, ChromeOS, Intel devices | ~72 MB |
-| **Universal** | `meteora-v0.0.2-universal.apk` | All supported architectures combined | ~182 MB |
+| **ARM64 (v8a)** *(Recommended)* | `meteora-v0.0.3-arm64-v8a.apk` | Most modern Android phones & tablets (2016+) | ~68 MB |
+| **ARM32 (v7a)** | `meteora-v0.0.3-armeabi-v7a.apk` | Older 32-bit Android phones | ~61 MB |
+| **x86_64** | `meteora-v0.0.3-x86_64.apk` | Android emulators, ChromeOS, Intel devices | ~72 MB |
+| **Universal** | `meteora-v0.0.3-universal.apk` | All supported architectures combined | ~182 MB |
 
 > **Cryptographic Verification**: Every release includes a `checksums.txt` file containing SHA-256 hashes for each APK. Verify your download with:
 > ```bash

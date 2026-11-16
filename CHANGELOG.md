@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Liquid Glass, Expressive Progress & Trustworthy State
+## [0.0.3] - 2026-11-16
+
+### Package Updaters & EJS Refresh Reliability
 
 ### Removed
 - **Automatic Format Selection**: deleted `IntelligentFormatSelector`, `FormatRecommendation` and their test suite. Downloads now always run the user's explicit video/audio/subtitle selection.
@@ -23,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Retry & Resume**: every task persists its exact yt-dlp argument vector (`download_tasks.command`, with an automatic `ALTER TABLE` migration), so failed, cancelled and interrupted downloads can be restarted from Downloads.
 - **Failed Tab**: `DownloadsScreen` gained a third tab, and paused/interrupted tasks are listed in Active with a Resume action instead of vanishing.
 - **Library Thumbnails**: media cards show source thumbnails, duration badges, and a metadata line.
+- **EJS, FFmpeg & FFprobe Package Updaters**: Extended the Package Update Manager (`packages/package_manager`) so every binary in a package can be updated atomically. `PackageType.ffmpeg` now ships `ffprobe` alongside `ffmpeg`, and `installPackage` downloads + SHA-256 verifies every co-shipped binary before the atomic directory swap; rollback restores the whole package on failure. Single-binary packages (`yt-dlp`, `yt-dlp-ejs`, `deno`, `quickjs-ng`) are unaffected.
+- **EJS Refresh Reliability**: Settings "Refresh EJS Components" now wraps the native channel call in `try/catch` (no stuck spinner on `PlatformException`) and shows a `SnackBar` confirmation on success. The `ytdlp-cache` is cleared and re-fetched from `--remote-components ejs:github` on the next extraction/download.
 
 ### Performance
 - **Blur is now opt-in** (`LiquidGlassContainer.enableBlur`, default off). Only the dock, app bar, search bars and modal sheets/dialogs enable `BackdropFilter`; inline cards render the tint and specular rim without a per-card blur layer, which was the main source of dropped frames.
@@ -36,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Invisible Failures**: download tasks in `error`, `paused` or `cancelled` state were rendered in neither tab, so failures and interrupted transfers disappeared from the UI. They are now always reachable and actionable.
+- **Stuck Refresh Spinner**: "Refresh EJS Components" no longer leaves `_isRefreshingEjs` stuck `true` when the method channel errors.
+
+### Artifacts & Downloads
+- `meteora-v0.0.3-arm64-v8a.apk` — Optimized build for modern 64-bit ARM devices (Recommended).
+- `meteora-v0.0.3-armeabi-v7a.apk` — Build for legacy 32-bit ARM devices.
+- `meteora-v0.0.3-x86_64.apk` — Build for 64-bit x86 emulators and Chromebooks.
+- `meteora-v0.0.3-universal.apk` — Universal package containing all architectures.
+- `checksums.txt` — SHA-256 cryptographic verification hashes for all APK artifacts.
 
 ---
 
