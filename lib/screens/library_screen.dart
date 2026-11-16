@@ -32,7 +32,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
       appBar: LiquidGlassAppBar(
         title: const Text('Media Library'),
         actions: [
@@ -58,9 +57,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ],
       ),
       body: LiquidGlassBackground(
-        child: SafeArea(
-          bottom: false,
-          child: ListenableBuilder(
+        child: ListenableBuilder(
             listenable: DownloadStateManager.instance,
             builder: (context, _) {
               final items = DownloadStateManager.instance.libraryItems;
@@ -176,8 +173,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             },
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildEmptyState(BuildContext context) {

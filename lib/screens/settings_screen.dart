@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_engine/media_engine.dart';
 
+import '../services/app_update_service.dart';
 import '../services/native_bridge.dart';
 import '../state/download_state.dart';
 import '../state/theme_manager.dart';
@@ -23,6 +25,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _ejsRefreshStatusMessage;
   String? _engineVersion;
   JsRuntimeInfo _jsRuntime = JsRuntimeInfo.unavailable();
+
+  bool _isCheckingAppUpdate = false;
+  String? _appUpdateMessage;
+  AppReleaseInfo? _availableAppUpdate;
 
   DeviceCapabilities _deviceCapabilities =
       DeviceCapabilities.standardAndroidArm64();
@@ -140,6 +146,214 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'EJS refresh failed: ${e.toString().replaceFirst('Exception: ', '')}';
       });
     }
+  }
+
+  Future<void> _checkAppUpdate() async {
+    setState(() {
+      _isCheckingAppUpdate = true;
+      _appUpdateMessage = 'Checking GitHub for updates…';
+      _availableAppUpdate = null;
+    });
+
+    try {
+      final release = await AppUpdateService.checkForUpdate();
+      if (!mounted) return;
+
+      if (release == null) {
+        setState(() {
+          _isCheckingAppUpdate = false;
+          _appUpdateMessage =
+              'Could not reach GitHub. Please check your network connection.';
+        });
+        return;
+      }
+
+      final isNewer = AppUpdateService.isNewerVersion(release.tagName);
+      setState(() {
+        _isCheckingAppUpdate = false;
+        if (isNewer) {
+          _availableAppUpdate = release;
+          _appUpdateMessage =
+              'Update available: ${release.tagName} (${release.name})';
+        } else {
+          _availableAppUpdate = null;
+          _appUpdateMessage =
+              'Meteora is up to date (v${AppUpdateService.currentVersion}).';
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingAppUpdate = false;
+        _appUpdateMessage = 'Check failed: $e';
+      });
+    }
+  }
+
+  void _showAboutAppDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+          child: LiquidGlassContainer(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            borderRadius: AppShapes.extraLarge,
+            enableBlur: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            colorScheme.primary,
+                            colorScheme.tertiary,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(AppShapes.large),
+                      ),
+                      child: Icon(
+                        Icons.cloud_download_rounded,
+                        color: colorScheme.onPrimary,
+                        size: 30,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Meteora',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'Version ${AppUpdateService.currentVersion} (Build ${AppUpdateService.currentBuildNumber})',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  'A lightweight, high-performance Android media downloader built clean-room style.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  padding: AppSpacing.cardPadding,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest.withAlpha(120),
+                    borderRadius: BorderRadius.circular(AppShapes.medium),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildInfoRow(
+                        'Engine',
+                        'yt-dlp (embedded Android Python)',
+                        theme,
+                      ),
+                      const Divider(height: AppSpacing.md),
+                      _buildInfoRow(
+                        'JS Solver',
+                        'QuickJS-NG (libqjs.so + EJS)',
+                        theme,
+                      ),
+                      const Divider(height: AppSpacing.md),
+                      _buildInfoRow(
+                        'Muxer',
+                        'FFmpeg & FFprobe (stream copy)',
+                        theme,
+                      ),
+                      const Divider(height: AppSpacing.md),
+                      _buildInfoRow(
+                        'Database',
+                        'SQLite (sqlite3 ACID storage)',
+                        theme,
+                      ),
+                      const Divider(height: AppSpacing.md),
+                      _buildInfoRow(
+                        'UI Presentation',
+                        'Material 3 Expressive & Liquid Glass',
+                        theme,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        showLicensePage(
+                          context: context,
+                          applicationName: 'Meteora',
+                          applicationVersion:
+                              'v${AppUpdateService.currentVersion}',
+                        );
+                      },
+                      child: const Text('Licenses'),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, ThemeData theme) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   IconData _themeModeIcon(AppThemeMode mode) {
@@ -266,19 +480,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
       appBar: const LiquidGlassAppBar(title: Text('Settings')),
       body: LiquidGlassBackground(
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.md,
-              AppSpacing.lg,
-              MediaQuery.paddingOf(context).bottom + 108,
-            ),
-            child: Column(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.lg,
+            MediaQuery.paddingOf(context).bottom + 108,
+          ),
+          child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildSectionHeader('Appearance', context),
@@ -804,13 +1015,335 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: AppSpacing.xl),
+
+                _buildSectionHeader('About App', context),
+                const SizedBox(height: AppSpacing.sm),
+                LiquidGlassContainer(
+                  padding: AppSpacing.cardPadding,
+                  borderRadius: AppShapes.large,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  colorScheme.primary,
+                                  colorScheme.tertiary,
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                AppShapes.medium,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.cloud_download_rounded,
+                              color: colorScheme.onPrimary,
+                              size: 26,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Meteora',
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.sm),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primaryContainer,
+                                        borderRadius: BorderRadius.circular(
+                                          AppShapes.extraSmall,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'v${AppUpdateService.currentVersion}',
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          color: colorScheme.onPrimaryContainer,
+                                          fontFeatures: const [
+                                            FontFeature.tabularFigures(),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'High-performance Android media downloader',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        'Powered by yt-dlp, QuickJS, FFmpeg, and Material 3 Expressive UI. '
+                        '100% on-device processing, Scoped Storage compliant, zero telemetry.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _isCheckingAppUpdate ? null : _checkAppUpdate,
+                          icon: _isCheckingAppUpdate
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.sync_rounded),
+                          label: Text(
+                            _isCheckingAppUpdate
+                                ? 'Checking GitHub…'
+                                : 'Check for Updates',
+                          ),
+                        ),
+                      ),
+                      if (_appUpdateMessage != null) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        Container(
+                          padding: AppSpacing.compactCardPadding,
+                          decoration: BoxDecoration(
+                            color: _availableAppUpdate != null
+                                ? colorScheme.primaryContainer
+                                : colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(
+                              AppShapes.small,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    _availableAppUpdate != null
+                                        ? Icons.new_releases_rounded
+                                        : Icons.info_outline_rounded,
+                                    color: _availableAppUpdate != null
+                                        ? colorScheme.onPrimaryContainer
+                                        : colorScheme.onSurfaceVariant,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  Expanded(
+                                    child: Text(
+                                      _appUpdateMessage!,
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: _availableAppUpdate != null
+                                            ? colorScheme.onPrimaryContainer
+                                            : colorScheme.onSurfaceVariant,
+                                        fontWeight: _availableAppUpdate != null
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (_availableAppUpdate != null) ...[
+                                const SizedBox(height: AppSpacing.sm),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        final url =
+                                            _availableAppUpdate!.htmlUrl;
+                                        NativeBridge.openUrl(url);
+                                      },
+                                      icon: const Icon(
+                                        Icons.open_in_new_rounded,
+                                        size: 14,
+                                      ),
+                                      label: const Text('View Release'),
+                                    ),
+                                    const SizedBox(width: AppSpacing.xs),
+                                    FilledButton.icon(
+                                      onPressed: () {
+                                        final apkUrl =
+                                            _availableAppUpdate!
+                                                .apkDownloadUrl ??
+                                            _availableAppUpdate!.htmlUrl;
+                                        NativeBridge.openUrl(apkUrl);
+                                      },
+                                      icon: const Icon(
+                                        Icons.download_rounded,
+                                        size: 14,
+                                      ),
+                                      label: const Text('Download APK'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                LiquidGlassContainer(
+                  padding: EdgeInsets.zero,
+                  borderRadius: AppShapes.large,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    borderRadius: BorderRadius.circular(AppShapes.large),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppShapes.large,
+                            ),
+                          ),
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: colorScheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(
+                                AppShapes.medium,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.info_outline_rounded,
+                              color: colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                          title: const Text('About Meteora'),
+                          subtitle: const Text(
+                            'Architecture, core engine & privacy',
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => _showAboutAppDialog(context),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppShapes.large,
+                            ),
+                          ),
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: colorScheme.tertiaryContainer,
+                              borderRadius: BorderRadius.circular(
+                                AppShapes.medium,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.code_rounded,
+                              color: colorScheme.onTertiaryContainer,
+                            ),
+                          ),
+                          title: const Text('GitHub Repository'),
+                          subtitle: const Text(
+                            'ameya-deshpande-5056/meteora-dl',
+                          ),
+                          trailing: const Icon(Icons.open_in_new_rounded),
+                          onTap: () async {
+                            final opened = await NativeBridge.openUrl(
+                              AppUpdateService.githubUrl,
+                            );
+                            if (!opened && context.mounted) {
+                              await Clipboard.setData(
+                                const ClipboardData(
+                                  text: AppUpdateService.githubUrl,
+                                ),
+                              );
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'GitHub link copied to clipboard.',
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppShapes.large,
+                            ),
+                          ),
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(
+                                AppShapes.medium,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.description_outlined,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          title: const Text('Open Source Licenses'),
+                          subtitle: const Text(
+                            'Third-party software notices',
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () {
+                            showLicensePage(
+                              context: context,
+                              applicationName: 'Meteora',
+                              applicationVersion:
+                                  'v${AppUpdateService.currentVersion}',
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.xxl),
               ],
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildSectionHeader(String title, BuildContext context) {

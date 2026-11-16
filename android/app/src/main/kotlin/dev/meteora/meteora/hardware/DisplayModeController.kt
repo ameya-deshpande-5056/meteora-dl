@@ -4,10 +4,6 @@ import android.app.Activity
 import android.os.Build
 import android.util.Log
 import android.view.Display
-import android.view.Surface
-import android.view.SurfaceView
-import android.view.View
-import android.view.ViewGroup
 
 /**
  * Asks the platform to render this window at the display's highest refresh rate.
@@ -66,19 +62,6 @@ object DisplayModeController {
                 window.attributes = attrs
             }
 
-            val surfaceApplied = applyFlutterSurfaceFrameRate(activity, maxHz)
-            if (!surfaceApplied) {
-                // Flutter's SurfaceView is usually not attached yet on create/resume;
-                // retry once the first frame exists so the surface hint lands too.
-                window.decorView.postDelayed({
-                    val applied = applyFlutterSurfaceFrameRate(activity, maxHz)
-                    Log.i(
-                        TAG,
-                        if (applied) "Surface frame rate set to ${maxHz}Hz" else "Surface frame rate still unavailable",
-                    )
-                }, 1200)
-            }
-
             val info = RefreshRateInfo(
                 activeHz = display.refreshRate,
                 maxHz = maxHz,
@@ -87,7 +70,7 @@ object DisplayModeController {
             )
             Log.i(
                 TAG,
-                "Requested ${maxHz}Hz via mode ${best.modeId}: ${modes.size} modes, active mode ${active.modeId} @ ${active.refreshRate}Hz, surface frame rate ${if (surfaceApplied) "set" else "unavailable"}",
+                "Requested ${maxHz}Hz via mode ${best.modeId}: ${modes.size} modes, active mode ${active.modeId} @ ${active.refreshRate}Hz",
             )
             // The mode switch is asynchronous, so report what the display settles on.
             window.decorView.postDelayed({
@@ -100,45 +83,7 @@ object DisplayModeController {
         }
     }
 
-    /**
-     * Flutter renders into a `SurfaceView`, whose buffer is produced on its own
-     * surface: the window's `preferredRefreshRate` alone is not always enough for
-     * the platform to pick a high mode. `Surface.setFrameRate` (API 30+) is the
-     * documented hint for content that owns its surface, so set it as well.
-     */
-    private fun applyFlutterSurfaceFrameRate(activity: Activity, maxHz: Float): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
-        return try {
-            val surfaceView = findSurfaceView(activity.window.decorView) ?: return false
-            val surface = surfaceView.holder.surface
-            if (surface == null || !surface.isValid) {
-                Log.i(TAG, "Flutter surface not ready yet; window preference stands alone")
-                return false
-            }
-            // A pure vsync hint lets the platform stay on the panel default when
-            // it considers a switch "not seamless"; the UI is always animated, so
-            // ask for the mode change outright.
-            surface.setFrameRate(
-                maxHz,
-                Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
-                Surface.CHANGE_FRAME_RATE_ALWAYS,
-            )
-            true
-        } catch (e: Throwable) {
-            Log.w(TAG, "Unable to set the surface frame rate", e)
-            false
-        }
-    }
 
-    private fun findSurfaceView(view: View): SurfaceView? {
-        if (view is SurfaceView) return view
-        if (view is ViewGroup) {
-            for (index in 0 until view.childCount) {
-                findSurfaceView(view.getChildAt(index))?.let { return it }
-            }
-        }
-        return null
-    }
 
     private fun displayOf(activity: Activity): Display? = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

@@ -90,7 +90,12 @@ class AdaptiveScaffold extends StatelessWidget {
               Expanded(
                 child: IndexedStack(
                   index: currentIndex,
-                  children: screens,
+                  children: List.generate(screens.length, (i) {
+                    return TickerMode(
+                      enabled: i == currentIndex,
+                      child: screens[i],
+                    );
+                  }),
                 ),
               ),
             ],
@@ -104,7 +109,12 @@ class AdaptiveScaffold extends StatelessWidget {
       extendBody: true,
       body: IndexedStack(
         index: currentIndex,
-        children: screens,
+        children: List.generate(screens.length, (i) {
+          return TickerMode(
+            enabled: i == currentIndex,
+            child: screens[i],
+          );
+        }),
       ),
       bottomNavigationBar: SafeArea(
         top: false,

@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -32,6 +33,7 @@ import kotlinx.coroutines.launch
 class MainActivity : FlutterActivity() {
 
     companion object {
+        private const val TAG = "MainActivity"
         const val METHOD_CHANNEL = "dev.meteora/engine"
         const val EVENT_CHANNEL = "dev.meteora/downloads"
         private const val PERMISSION_REQUEST_CODE = 1002
@@ -44,6 +46,7 @@ class MainActivity : FlutterActivity() {
     private val scope = CoroutineScope(Dispatchers.Main)
     private val processExecutor = SafeProcessExecutor()
     private val storageManager by lazy { DownloadStorageManager(applicationContext) }
+    private var isEngineAttached = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -160,6 +163,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        isEngineAttached = true
 
         val capabilityDetector = DeviceCapabilityDetector(this)
         val mediaStoreHelper = MediaStoreHelper(applicationContext)
@@ -396,6 +400,25 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                "openUrl" -> {
+                    val url = call.argument<String>("url") ?: ""
+                    if (url.startsWith("http://") || url.startsWith("https://")) {
+                        try {
+                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(browserIntent)
+                            result.success(true)
+                        } catch (_: ActivityNotFoundException) {
+                            result.success(false)
+                        } catch (e: Throwable) {
+                            result.error("OPEN_URL_ERROR", e.localizedMessage ?: "Failed to open url", null)
+                        }
+                    } else {
+                        result.success(false)
+                    }
+                }
+
                 else -> result.notImplemented()
             }
         }
@@ -403,18 +426,42 @@ class MainActivity : FlutterActivity() {
         // 2. EventChannel for streaming live download progress
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL).setStreamHandler(
             object : EventChannel.StreamHandler {
+                private var activeSink: EventChannel.EventSink? = null
+
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    activeSink = events
                     DownloadForegroundService.progressListener = { eventMap ->
-                        scope.launch {
-                            events?.success(eventMap)
+                        if (isEngineAttached && !isFinishing && !isDestroyed) {
+                            runOnUiThread {
+                                try {
+                                    if (isEngineAttached && !isFinishing && !isDestroyed) {
+                                        activeSink?.success(eventMap)
+                                    }
+                                } catch (e: Throwable) {
+                                    Log.w(TAG, "Failed to deliver download progress to Flutter", e)
+                                }
+                            }
                         }
                     }
                 }
 
                 override fun onCancel(arguments: Any?) {
+                    activeSink = null
                     DownloadForegroundService.progressListener = null
                 }
             }
         )
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        isEngineAttached = false
+        DownloadForegroundService.progressListener = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    override fun onDestroy() {
+        isEngineAttached = false
+        DownloadForegroundService.progressListener = null
+        super.onDestroy()
     }
 }

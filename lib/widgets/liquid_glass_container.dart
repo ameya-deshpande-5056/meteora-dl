@@ -253,10 +253,7 @@ class _SpecularGlassBorderPainter extends CustomPainter {
   }
 }
 
-/// Ambient lighting behind Liquid Glass surfaces.
-///
-/// Three soft radial blooms plus a vertical shade give the blur something to
-/// refract, without running any animation (so it costs a single paint pass).
+/// Clean solid background surface without liquid glass radial glow blooms.
 class LiquidGlassBackground extends StatelessWidget {
   final Widget child;
 
@@ -265,75 +262,14 @@ class LiquidGlassBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final isAmoled = isDark && theme.scaffoldBackgroundColor == Colors.black;
-    final scale = isAmoled ? 0.7 : 1.0;
-
-    final primaryGlow = colorScheme.primary.withAlpha((isDark ? 40 : 30) * scale ~/ 1);
-    final secondaryGlow = colorScheme.secondary.withAlpha((isDark ? 26 : 22) * scale ~/ 1);
-    final tertiaryGlow = colorScheme.tertiary.withAlpha((isDark ? 30 : 22) * scale ~/ 1);
-
-    return DecoratedBox(
-      decoration: BoxDecoration(color: theme.scaffoldBackgroundColor),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    colorScheme.surfaceContainerLowest.withAlpha(isDark ? 90 : 40),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(-0.85, -0.9),
-                  radius: 1.1,
-                  colors: [primaryGlow, Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-          IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0.95, 0.2),
-                  radius: 1.0,
-                  colors: [secondaryGlow, Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-          IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0.1, 0.95),
-                  radius: 1.05,
-                  colors: [tertiaryGlow, Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-          child,
-        ],
-      ),
+    return ColoredBox(
+      color: theme.scaffoldBackgroundColor,
+      child: child,
     );
   }
 }
 
-/// Translucent Liquid Glass app bar that frosts over scrolling content.
+/// Clean Material 3 app bar without liquid glass frosting, blur, or specular rim.
 class LiquidGlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Widget title;
   final List<Widget>? actions;
@@ -352,53 +288,15 @@ class LiquidGlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final reduceMotion = MediaQuery.of(context).disableAnimations;
 
-    final barBg = isDark
-        ? theme.scaffoldBackgroundColor.withAlpha(reduceMotion ? 244 : 150)
-        : colorScheme.surface.withAlpha(reduceMotion ? 248 : 170);
-
-    final bottomEdgeColor = isDark
-        ? Colors.white.withAlpha(28)
-        : colorScheme.outlineVariant.withAlpha(90);
-
-    final appBar = AppBar(
+    return AppBar(
       title: title,
       leading: leading,
       actions: actions,
-      backgroundColor: Colors.transparent,
+      backgroundColor: theme.scaffoldBackgroundColor,
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
       elevation: 0,
-    );
-
-    final decorated = DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            barBg,
-            Color.alphaBlend(
-              colorScheme.primary.withAlpha(isDark ? 10 : 6),
-              barBg,
-            ),
-          ],
-        ),
-        border: Border(bottom: BorderSide(color: bottomEdgeColor, width: 0.8)),
-      ),
-      child: appBar,
-    );
-
-    if (reduceMotion) return decorated;
-
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: decorated,
-      ),
     );
   }
 }

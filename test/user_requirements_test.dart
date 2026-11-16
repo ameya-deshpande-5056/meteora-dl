@@ -486,7 +486,12 @@ void main() {
   });
 
   group('Requirement 5: Liquid Glass theming across app surfaces', () {
-    testWidgets('renders LiquidGlassAppBar, LiquidGlassBackground, BackdropFilter, and floating nav bar', (tester) async {
+    testWidgets('renders clean M3 app bar, clean background, and floating nav bar dock', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       final db = MeteoraDatabase.openInMemory();
       db.setSetting('first_launch_setup_done', 'true');
       await DownloadStateManager.instance.init(db: db);
@@ -495,7 +500,7 @@ void main() {
       await tester.pumpWidget(const MeteoraDLApp());
       await tester.pumpAndSettle();
 
-      // Home screen renders LiquidGlassAppBar, LiquidGlassBackground, floating nav bar, URL bar, and BackdropFilter
+      // Home screen renders LiquidGlassAppBar, LiquidGlassBackground, floating nav bar dock, and BackdropFilter
       expect(find.byType(LiquidGlassAppBar), findsWidgets);
       expect(find.byType(LiquidGlassBackground), findsWidgets);
       expect(find.byType(LiquidGlassContainer), findsWidgets);

@@ -919,26 +919,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     required IconData icon,
     required String label,
     required String value,
+    required RoundedRectangleBorder shape,
     VoidCallback? onTap,
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final enabled = onTap != null;
+    final isAmoled = theme.scaffoldBackgroundColor == Colors.black;
+
+    final borderSide = BorderSide(
+      color: isAmoled
+          ? Colors.white.withAlpha(24)
+          : colorScheme.outlineVariant.withAlpha(80),
+      width: 0.8,
+    );
 
     return Material(
-      color: colorScheme.surfaceContainerHigh.withAlpha(185),
-      borderRadius: BorderRadius.circular(AppShapes.medium),
+      color: isAmoled
+          ? const Color(0xD90E0E0E)
+          : colorScheme.surfaceContainerHigh.withAlpha(185),
+      shape: shape.copyWith(side: borderSide),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(AppShapes.medium),
-        onTap: onTap,
+        customBorder: shape,
+        onTap: enabled
+            ? () {
+                HapticFeedback.selectionClick();
+                onTap();
+              }
+            : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 12),
           child: Row(
             children: [
-              Icon(
-                icon,
-                size: 20,
-                color: enabled ? colorScheme.primary : colorScheme.onSurface.withAlpha(90),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: enabled
+                      ? colorScheme.primaryContainer
+                      : colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(AppShapes.small),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: enabled
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onSurface.withAlpha(90),
+                ),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -951,7 +981,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 1),
+                    const SizedBox(height: 2),
                     Text(
                       value,
                       maxLines: 1,
@@ -967,7 +997,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               if (enabled)
                 Icon(
                   Icons.unfold_more_rounded,
-                  size: 18,
+                  size: 20,
                   color: colorScheme.onSurfaceVariant,
                 ),
             ],
@@ -1025,6 +1055,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           '${_selectedSubtitles.length} selected (${_selectedSubtitles.map((s) => s.code).take(3).join(", ")}${_selectedSubtitles.length > 3 ? "…" : ""})';
     }
 
+    final optionRowBuilders = <Widget Function(int index, int count)>[
+      if (showVideoRow)
+        (index, count) => _buildStreamOptionRow(
+              context: context,
+              icon: Icons.videocam_outlined,
+              label: 'Video Resolution & Codec',
+              value: videoValue,
+              shape: ConnectedShapes.card.inColumn(index, count),
+              onTap: videoFormats.isNotEmpty ? () => _openVideoFormatSheet(media) : null,
+            ),
+      if (showAudioRow)
+        (index, count) => _buildStreamOptionRow(
+              context: context,
+              icon: Icons.audiotrack_outlined,
+              label: 'Audio Bitrate & Codec',
+              value: audioValue,
+              shape: ConnectedShapes.card.inColumn(index, count),
+              onTap: canPickAudio ? () => _openAudioFormatSheet(media) : null,
+            ),
+      if (showSubsRow)
+        (index, count) => _buildStreamOptionRow(
+              context: context,
+              icon: Icons.subtitles_outlined,
+              label: 'Subtitles',
+              value: subsValue,
+              shape: ConnectedShapes.card.inColumn(index, count),
+              onTap: subTracks.isNotEmpty ? () => _openSubtitlePickerSheet(media) : null,
+            ),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1045,35 +1105,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             );
           }).toList(),
         ),
-        const SizedBox(height: AppSpacing.md),
-        if (showVideoRow) ...[
-          _buildStreamOptionRow(
-            context: context,
-            icon: Icons.videocam_outlined,
-            label: 'Video Resolution & Codec',
-            value: videoValue,
-            onTap: videoFormats.isNotEmpty ? () => _openVideoFormatSheet(media) : null,
-          ),
-          const SizedBox(height: AppSpacing.xs),
+        if (optionRowBuilders.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          for (int i = 0; i < optionRowBuilders.length; i++) ...[
+            if (i > 0) const SizedBox(height: 2.0),
+            optionRowBuilders[i](i, optionRowBuilders.length),
+          ],
         ],
-        if (showAudioRow) ...[
-          _buildStreamOptionRow(
-            context: context,
-            icon: Icons.audiotrack_outlined,
-            label: 'Audio Bitrate & Codec',
-            value: audioValue,
-            onTap: canPickAudio ? () => _openAudioFormatSheet(media) : null,
-          ),
-          const SizedBox(height: AppSpacing.xs),
-        ],
-        if (showSubsRow)
-          _buildStreamOptionRow(
-            context: context,
-            icon: Icons.subtitles_outlined,
-            label: 'Subtitles',
-            value: subsValue,
-            onTap: subTracks.isNotEmpty ? () => _openSubtitlePickerSheet(media) : null,
-          ),
       ],
     );
   }
@@ -1084,7 +1122,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
       appBar: LiquidGlassAppBar(
         title: const Text('MeteoraDL'),
         actions: [
@@ -1106,9 +1143,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
       ),
       body: LiquidGlassBackground(
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
+        child: SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
               AppSpacing.md,
@@ -1190,10 +1225,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 label: Text(_isExtracting ? 'Analyzing streams...' : 'Inspect & Extract'),
               ),
 
-              // Expressive indeterminate wavy bar while the engine inspects.
+              // Expressive indeterminate wavy bar while the engine inspects (Morphe / M3 Expressive style).
               if (_isExtracting) ...[
                 const SizedBox(height: AppSpacing.sm),
-                WavyProgressIndicator(height: 10, amplitude: 2.6),
+                const WavyProgressIndicator(),
               ],
 
               if (_errorMessage != null) ...[
@@ -1404,7 +1439,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ],
             ],
           ),
-        ),
         ),
       ),
     );

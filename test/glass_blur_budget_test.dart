@@ -55,12 +55,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.byType(BackdropFilter),
-      findsOneWidget,
-      reason: 'Only the app bar may blur; content cards must stay blur-free',
+      findsNothing,
+      reason: 'App bar, background and content cards are clean and blur-free',
     );
   }
 
-  testWidgets('each screen pays for exactly one blur (its app bar)', (tester) async {
+  testWidgets('each screen is completely blur-free (clean app bar and background)', (tester) async {
     final db = MeteoraDatabase.openInMemory();
     await DownloadStateManager.instance.init(db: db);
 

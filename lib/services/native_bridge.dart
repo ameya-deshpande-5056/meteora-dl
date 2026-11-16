@@ -333,4 +333,16 @@ class NativeBridge {
       return false;
     }
   }
+
+  /// Opens an external URL via Android's ACTION_VIEW intent.
+  static Future<bool> openUrl(String url) async {
+    try {
+      final res = await _methodChannel.invokeMethod<bool>('openUrl', {
+        'url': url,
+      });
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

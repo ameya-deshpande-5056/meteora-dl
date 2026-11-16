@@ -23,7 +23,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
       appBar: LiquidGlassAppBar(
         title: const Text('Downloads'),
         actions: [
@@ -38,9 +37,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         ],
       ),
       body: LiquidGlassBackground(
-        child: SafeArea(
-          bottom: false,
-          child: ListenableBuilder(
+        child: ListenableBuilder(
             listenable: DownloadStateManager.instance,
             builder: (context, _) {
               final inProgress = DownloadStateManager.instance.inProgressTasks;
@@ -121,8 +118,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             },
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildEmptyState(BuildContext context) {
@@ -318,11 +314,12 @@ class _TaskCard extends StatelessWidget {
     final canOpen =
         isCompleted && task.filePath != null && task.filePath!.isNotEmpty;
 
-    return LiquidGlassContainer(
-      padding: AppSpacing.cardPadding,
-      borderRadius: AppShapes.large,
-      onTap: canOpen ? () => _openTaskFile(context) : null,
-      child: Column(
+    return RepaintBoundary(
+      child: LiquidGlassContainer(
+        padding: AppSpacing.cardPadding,
+        borderRadius: AppShapes.large,
+        onTap: canOpen ? () => _openTaskFile(context) : null,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -368,7 +365,7 @@ class _TaskCard extends StatelessWidget {
               value: isQueued || task.progressPercent <= 0
                   ? null
                   : task.progressPercent / 100.0,
-              amplitude: 3.2,
+              isAnimating: isDownloading || isQueued,
             ),
             const SizedBox(height: AppSpacing.sm),
             Row(
@@ -408,7 +405,7 @@ class _TaskCard extends StatelessWidget {
             if (task.progressPercent > 0) ...[
               WavyProgressIndicator(
                 value: task.progressPercent / 100.0,
-                amplitude: 2.6,
+                isAnimating: false,
               ),
               const SizedBox(height: AppSpacing.sm),
             ],
@@ -498,6 +495,7 @@ class _TaskCard extends StatelessWidget {
           ],
         ],
       ),
-    );
+    ),
+  );
   }
 }

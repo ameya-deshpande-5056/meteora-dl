@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Material 3 Expressive motion tokens.
+/// Material 3 Expressive motion tokens, aligning with Morphe App's motion scheme.
 ///
 /// Expressive surfaces are springy rather than linear: short durations with
 /// overshoot on entry and emphasized easing on exit.
@@ -9,6 +9,9 @@ class AppMotion {
 
   /// Quick state change (chip selection, icon swap).
   static const Duration fast = Duration(milliseconds: 180);
+
+  /// Morphe standard UI animation duration.
+  static const Duration normal = Duration(milliseconds: 220);
 
   /// Standard expressive transition (cards, sheets, indicators).
   static const Duration medium = Duration(milliseconds: 320);
@@ -19,7 +22,10 @@ class AppMotion {
   /// One full cycle of an indeterminate wavy progress indicator.
   static const Duration progressCycle = Duration(milliseconds: 1600);
 
-  /// Overshoots slightly — used for selection indicators and pills.
+  /// Target initial scale for dialog entry/exit animations (matches Morphe's DIALOG_SCALE: 0.95f).
+  static const double dialogScale = 0.95;
+
+  /// Overshoots slightly — used for selection indicators, pills, and morphing corners.
   static const Curve spring = Cubic(0.34, 1.56, 0.64, 1.0);
 
   /// Material 3 "emphasized" decelerate curve.

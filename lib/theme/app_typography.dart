@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 
-/// Material 3 Typography Scale conforming to Android typography guidelines
+/// Material 3 Typography Scale conforming to Android typography guidelines,
+/// with expressive heading hierarchy inspired by Morphe App.
 class AppTypography {
+  static TextStyle headerTitle(Color onSurface) => TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.2,
+        height: 1.3,
+        color: onSurface,
+      );
+
   static TextTheme textTheme(Color onSurface, Color onSurfaceVariant) {
     return TextTheme(
       headlineLarge: TextStyle(
@@ -90,4 +99,23 @@ class AppTypography {
       ),
     );
   }
+}
+
+/// Expressive typography extension modeled after Morphe App's `Typography.headerTitle`.
+extension MorpheTypography on TextTheme {
+  /// Name heading an app card, section, or dialog, a step under titleLarge
+  /// so it leads without dwarfing the bodyMedium line beneath it.
+  TextStyle get headerTitle =>
+      titleLarge?.copyWith(
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+        letterSpacing: -0.2,
+      ) ??
+      const TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+        letterSpacing: -0.2,
+      );
 }

@@ -22,6 +22,7 @@ import dev.meteora.meteora.storage.PublishedFileResult
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -175,10 +176,18 @@ class DownloadForegroundService : Service() {
                 updateNotification(title, "Download complete", 100)
             } catch (e: YoutubeDL.CanceledException) {
                 emitEvent(taskId, "cancelled", 0.0, "0 B/s", "")
+            } catch (e: CancellationException) {
+                emitEvent(taskId, "cancelled", 0.0, "0 B/s", "")
             } catch (e: Throwable) {
-                Log.e(TAG, "Exception during download task execution", e)
-                emitEvent(taskId, "error", 0.0, "0 B/s", e.localizedMessage ?: "Unknown error")
-                updateNotification(title, "Download error", 0)
+                val isCancelled = e.cause is YoutubeDL.CanceledException ||
+                    e.message?.contains("canceled", ignoreCase = true) == true
+                if (isCancelled) {
+                    emitEvent(taskId, "cancelled", 0.0, "0 B/s", "")
+                } else {
+                    Log.e(TAG, "Exception during download task execution", e)
+                    emitEvent(taskId, "error", 0.0, "0 B/s", e.localizedMessage ?: "Unknown error")
+                    updateNotification(title, "Download error", 0)
+                }
             } finally {
                 stagingDir.deleteRecursively()
                 activeTasks.remove(taskId)
@@ -405,7 +414,11 @@ class DownloadForegroundService : Service() {
         if (filePath != null) {
             event["filePath"] = filePath
         }
-        progressListener?.invoke(event)
+        try {
+            progressListener?.invoke(event)
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to invoke progressListener: ${e.message}")
+        }
     }
 
     private fun createNotificationChannel() {

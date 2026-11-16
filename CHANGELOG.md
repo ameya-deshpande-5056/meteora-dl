@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-11-16
+
+### Material 3 Expressive Design Overhaul & Graphics Performance
+
+### Added
+- **Connected Settings Architecture (MicroG RE & Morphe Style)**: Completely redesigned the Settings interface with grouped `ConnectedGroup` cards featuring contextual corner radii (`connectedTop`, `connectedMiddle`, `connectedBottom`), enhanced typographic hierarchy, semantic icons, and clear visual division between settings domains.
+- **Dancing Wavy Progress Indicator (`WavyProgressIndicator`)**:
+  - Implemented dynamic dancing sine wave animation during active downloads (`dancing: true`), echoing Google Play Store and Morphe motion aesthetics.
+  - Symmetrical geometry with balanced right-side and left-side padding and phase alignment so the wave begins and terminates uniformly.
+  - Refined stroke width (3.0dp) for an elegant, thinner profile without visual clutter.
+  - Accessible fallback to standard `LinearProgressIndicator` when Android's `disableAnimations` / reduced motion setting is active.
+- **In-App "About App" & Check for Updates (`AppUpdateService`)**:
+  - Added dedicated About App section in Settings with Meteora app identity, version badges, GitHub links, and Open Source Licenses.
+  - Integrated direct GitHub Releases update checker with automatic semantic version comparison, release note dialogs, and direct APK download links.
+
+### Changed
+- **Header & Surface Contrast Overhaul**: Removed distracting glass blur from the top app bar and app background, adopting clean Material 3 Expressive surfaces (`SurfaceContainerLowest` / `SurfaceContainerHigh`) with crisp typography and high contrast, while preserving the floating navigation dock.
+
+### Performance & Stability
+- **Android BLASTBufferQueue Fix**:
+  - Resolved `acquireNextBufferLocked: Can't acquire next buffer. Already acquired max frames 5 max:3 + 2` buffer exhaustion on Android 11–15.
+  - Removed conflicting surface-level `Surface.setFrameRate` from `DisplayModeController.kt`, managing high refresh rate (90Hz / 120Hz) cleanly at the Window level (`preferredRefreshRate` and `preferredDisplayModeId`).
+  - Statically cached wave geometry (`_cachedMetric`, path, length) in `_MorpheLinearWavyPainter` to avoid 120Hz native `SkPath` and `computeMetrics()` re-allocations on every frame.
+  - Added `RepaintBoundary` around `WavyProgressIndicator` and `_TaskCard`, and wrapped offscreen tabs in `TickerMode(enabled: i == currentIndex)` to eliminate off-screen vsync ticks.
+- **Cancellation & Native Stream Cleanup**:
+  - Handled `InterruptedIOException: read interrupted by close() on another thread` in native stream readers when downloads are cancelled.
+  - Cleaned process group teardown to ensure immediate cancellation without noisy stack traces or detached channel warnings.
+
+### Artifacts & Downloads
+- `meteora-v0.0.4-arm64-v8a.apk` — Optimized build for modern 64-bit ARM devices (Recommended).
+- `meteora-v0.0.4-armeabi-v7a.apk` — Build for legacy 32-bit ARM devices.
+- `meteora-v0.0.4-x86_64.apk` — Build for 64-bit x86 emulators and Chromebooks.
+- `meteora-v0.0.4-universal.apk` — Universal package containing all architectures.
+- `checksums.txt` — SHA-256 cryptographic verification hashes for all APK artifacts.
+
+---
+
 ## [0.0.3] - 2026-11-16
 
 ### Package Updaters & EJS Refresh Reliability

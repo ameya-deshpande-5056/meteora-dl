@@ -13,7 +13,7 @@
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.41+-02569B?logo=flutter&logoColor=white" alt="Flutter" /></a>
   <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.2+-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin" /></a>
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-7.0+-3DDC84?logo=android&logoColor=white" alt="Android" /></a>
-  <a href="https://github.com/meteora-app/meteora-dl/releases"><img src="https://img.shields.io/badge/Release-v0.0.3-orange.svg" alt="Release" /></a>
+  <a href="https://github.com/ameya-deshpande-5056/meteora-dl/releases"><img src="https://img.shields.io/badge/Release-v0.0.4-orange.svg" alt="Release" /></a>
 </p>
 
 ---
@@ -32,10 +32,13 @@
 - 🎛️ **Simple Mode, Codec & Subtitle Picker**: Choose directly between **Video + Audio**, **Video Only**, **Audio Only**, and **Subtitles Only**, with dedicated pickers for video resolution/framerate/codec (`AV1`, `VP9`, `H.265`, `H.264`), audio bitrate/codec (`Opus`, `AAC`), and creator or auto-generated subtitle languages.
 - ⚡ **Persistent Background Downloads**: Powered by a robust Kotlin `DownloadForegroundService` with notification progress bars, real-time speed (MB/s), ETA calculations, retries, and Wi-Fi/wake locks to prevent OEM task termination.
 - 🔄 **In-App Over-The-Air Engine Updates**: Update the embedded `yt-dlp` binary dynamically from official upstream channels directly within the app without waiting for an APK release.
-- 🎨 **Material 3 Expressive & Liquid Glass**:
+- 🎨 **Material 3 Expressive & Clean Surface Contrast**:
+  - **Connected Settings (MicroG RE & Morphe Inspired)**: Grouped cards with connected shapes (`connectedTop`, `connectedMiddle`, `connectedBottom`), contextual corner radii, high visual hierarchy, and clean semantic division across engine, storage, theme, and about domains.
+  - **Clean Surfaces & Floating Dock**: Contrast-compliant Material 3 surfaces for app bars and backgrounds, paired with a floating navigation dock featuring animated selection capsules and spring physics.
+  - **Dancing Wavy Progress (`WavyProgressIndicator`)**: Material 3 Expressive dancing sine wave progress with a dynamic oscillating wave during active downloads, balanced symmetrical padding, refined 3.0dp stroke, and automatic reduced-motion fallbacks.
   - **Clean Theme Picker (`Choose theme`)**: Switch between **Follow System**, **Light Mode**, **Dark Mode**, and **AMOLED Black** (`#000000`) with preview swatches persisted in SQLite, plus Android 12+ **Dynamic Color (Monet)** support.
-  - **Liquid Glass**: Directional vibrancy gradients, a two-tone specular rim with inset highlight and top-edge gloss on every surface, with real-time `BackdropFilter` blur reserved for the floating dock, app bar, search bars, and modal sheets/dialogs so scrolling stays smooth. Automatic reduced-motion fallbacks throughout.
-  - **Expressive Motion & Wavy Progress**: Score/upload bars and the queue use a Material 3 Expressive wavy progress indicator (determinate and indeterminate), springy navigation selection, and tabular figures so live speed and percentage do not jitter.
+- 🚀 **Hardware Diagnostics & 120Hz High Refresh Rate**: Automatically requests the panel's maximum refresh rate (90Hz / 120Hz) via native Window Manager display modes without `BLASTBufferQueue` surface starvation or frame stutter.
+- 📦 **In-App App Updates & About App**: Check for the latest Meteora releases directly from GitHub within Settings, preview release notes, and install updates seamlessly.
 - 📋 **Smart Clipboard & Android Share Sheet**:
   - Detects copied media links on app resume with a floating, non-intrusive one-tap inspection action.
   - Fully integrated with Android's system Share menu from any browser or app.
@@ -95,14 +98,14 @@ flowchart TD
 
 ## 📥 Downloads & Installation
 
-Precompiled APKs for each release are published under [**Releases**](https://github.com/meteora-app/meteora-dl/releases).
+Precompiled APKs for each release are published under [**Releases**](https://github.com/ameya-deshpande-5056/meteora-dl/releases).
 
 | Architecture | APK Filename | Target Devices | Size |
 | :--- | :--- | :--- | :--- |
-| **ARM64 (v8a)** *(Recommended)* | `meteora-v0.0.3-arm64-v8a.apk` | Most modern Android phones & tablets (2016+) | ~68 MB |
-| **ARM32 (v7a)** | `meteora-v0.0.3-armeabi-v7a.apk` | Older 32-bit Android phones | ~61 MB |
-| **x86_64** | `meteora-v0.0.3-x86_64.apk` | Android emulators, ChromeOS, Intel devices | ~72 MB |
-| **Universal** | `meteora-v0.0.3-universal.apk` | All supported architectures combined | ~182 MB |
+| **ARM64 (v8a)** *(Recommended)* | `meteora-v0.0.4-arm64-v8a.apk` | Most modern Android phones & tablets (2016+) | ~68 MB |
+| **ARM32 (v7a)** | `meteora-v0.0.4-armeabi-v7a.apk` | Older 32-bit Android phones | ~61 MB |
+| **x86_64** | `meteora-v0.0.4-x86_64.apk` | Android emulators, ChromeOS, Intel devices | ~72 MB |
+| **Universal** | `meteora-v0.0.4-universal.apk` | All supported architectures combined | ~182 MB |
 
 > **Cryptographic Verification**: Every release includes a `checksums.txt` file containing SHA-256 hashes for each APK. Verify your download with:
 > ```bash

@@ -55,7 +55,7 @@ meteora-dl/
   - The solver scripts come from `--remote-components ejs:github` and are cached in a persistent `--cache-dir`, so they are fetched once.
   - Sites that still require a login, bot check, or an unsupported capability must surface an extraction error; never bypass a bot gate or login.
 - **Media Merging**: FFmpeg stream copy (`-c copy`) without re-encoding unless format conversion is explicitly requested.
-- **High Refresh Rate**: `DisplayModeController` sets `WindowManager.LayoutParams.preferredRefreshRate` to the highest rate in `Display.getSupportedModes()` on create and on every resume, plus `Surface.setFrameRate` for Flutter's `SurfaceView` once its surface exists, so the Flutter UI (whose frame scheduling always follows display vsync) renders at the panel's real rate instead of Android's 60 Hz default. Settings → Hardware Diagnostics reports active vs. panel maximum.
+- **High Refresh Rate**: `DisplayModeController` sets `WindowManager.LayoutParams.preferredRefreshRate` and `preferredDisplayModeId` to the highest rate in `Display.getSupportedModes()` on create and on every resume (avoiding direct `Surface.setFrameRate` on Flutter's internal `SurfaceView`, which triggers `BLASTBufferQueue` buffer starvation/exhaustion on Android 11–15), so the Flutter UI (whose frame scheduling always follows display vsync) renders at the panel's real rate instead of Android's 60 Hz default. Settings → Hardware Diagnostics reports active vs. panel maximum.
 - **Storage**: SQLite (`MeteoraDatabase`) in protected app storage, plus `MediaStore.Downloads` and Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`) for public and user-selected directories.
 
 ---
