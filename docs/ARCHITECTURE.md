@@ -59,7 +59,7 @@ graph TD
 - **Processing**:
   - Direct invocation of `yt-dlp --dump-single-json --no-warnings`.
   - JSON parser extracts stream manifests (`selectableVideoFormats`, `selectableAudioFormats`) and both creator and auto-generated captions (`availableSubtitleTracks`).
-  - **Command Builder (`SimpleDownloadCommandBuilder`)** constructs typed `yt-dlp` argument arrays for explicit user selections while preserving `IntelligentFormatSelector` for hardware-aware analysis (`DeviceCapabilities`).
+  - **Command Builder (`SimpleDownloadCommandBuilder`)** constructs typed `yt-dlp` argument arrays for the user's explicit video, audio and subtitle selections. `DeviceCapabilities` is used only for hardware diagnostics shown in Settings.
 - **Output**: Typed `MediaInfo` entity and structured `List<String>` argument vectors passed to Android native services.
 
 ### B. Background Execution, Resilience & Storage (`android/`)

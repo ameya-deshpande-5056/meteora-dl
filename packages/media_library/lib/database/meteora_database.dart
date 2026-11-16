@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqlite3/sqlite3.dart';
 import '../models/download_task_record.dart';
 import '../models/media_item.dart';
@@ -38,6 +40,7 @@ class MeteoraDatabase {
         status TEXT NOT NULL DEFAULT 'queued',
         file_path TEXT,
         error_message TEXT,
+        command TEXT,
         created_at INTEGER NOT NULL
       );
     ''');
@@ -77,6 +80,35 @@ class MeteoraDatabase {
         value TEXT NOT NULL
       );
     ''');
+
+    _migrateDownloadTaskCommandColumn();
+  }
+
+  /// Adds the `command` column to databases created before retry support landed.
+  void _migrateDownloadTaskCommandColumn() {
+    final columns = _db.select('PRAGMA table_info(download_tasks);');
+    final hasCommand = columns.any((row) => row['name'] == 'command');
+    if (!hasCommand) {
+      _db.execute('ALTER TABLE download_tasks ADD COLUMN command TEXT;');
+    }
+  }
+
+  static String? _encodeCommand(List<String>? command) {
+    if (command == null || command.isEmpty) return null;
+    return jsonEncode(command);
+  }
+
+  static List<String>? _decodeCommand(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((e) => e.toString()).toList(growable: false);
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 
   // ===================== DOWNLOAD TASKS CRUD =====================
@@ -86,8 +118,8 @@ class MeteoraDatabase {
       INSERT INTO download_tasks (
         task_id, url, title, thumbnail_url, format_label,
         progress_percent, speed_text, eta_text, total_size_text,
-        status, file_path, error_message, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        status, file_path, error_message, command, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(task_id) DO UPDATE SET
         progress_percent = excluded.progress_percent,
         speed_text = excluded.speed_text,
@@ -95,7 +127,8 @@ class MeteoraDatabase {
         total_size_text = excluded.total_size_text,
         status = excluded.status,
         file_path = excluded.file_path,
-        error_message = excluded.error_message;
+        error_message = excluded.error_message,
+        command = COALESCE(excluded.command, download_tasks.command);
     ''');
 
     stmt.execute([
@@ -111,6 +144,7 @@ class MeteoraDatabase {
       task.status,
       task.filePath,
       task.errorMessage,
+      _encodeCommand(task.command),
       task.createdAt.millisecondsSinceEpoch,
     ]);
     stmt.dispose();
@@ -172,6 +206,7 @@ class MeteoraDatabase {
       status: row['status'] as String,
       filePath: row['file_path'] as String?,
       errorMessage: row['error_message'] as String?,
+      command: _decodeCommand(row['command']),
       createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
     )).toList();
   }
@@ -196,6 +231,7 @@ class MeteoraDatabase {
       status: row['status'] as String,
       filePath: row['file_path'] as String?,
       errorMessage: row['error_message'] as String?,
+      command: _decodeCommand(row['command']),
       createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
     );
   }

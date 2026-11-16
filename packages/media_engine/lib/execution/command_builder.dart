@@ -1,10 +1,13 @@
-import '../models/format_recommendation.dart';
-
 enum JsRuntimeType {
   deno,
   quickjs,
 }
 
+/// Builds structured yt-dlp argument vectors for a standalone Python runtime.
+///
+/// The app itself drives downloads through `SimpleDownloadCommandBuilder` and
+/// the embedded engine, so this builder is a low-level helper for tests and
+/// alternative hosts. It never performs shell interpolation.
 class CommandBuilder {
   final String pythonPath;
   final String ytdlpScriptPath;
@@ -46,8 +49,8 @@ class CommandBuilder {
     required String url,
     required String outputDirectory,
     required String outputFilenameTemplate,
-    FormatRecommendation? recommendation,
-    String? customFormatSelector,
+    String? formatSelector,
+    String? mergeOutputFormat,
     bool enableDirectStreamCopy = true,
   }) {
     final args = <String>[
@@ -61,16 +64,14 @@ class CommandBuilder {
     ];
 
     // Format selection
-    final formatStr = customFormatSelector ?? recommendation?.ytdlpFormatSelector ?? 'bestvideo+bestaudio/best';
-    args.addAll(['-f', formatStr]);
+    args.addAll(['-f', formatSelector ?? 'bestvideo+bestaudio/best']);
 
     // FFmpeg integration for merging
     if (ffmpegPath != null && ffmpegPath!.isNotEmpty) {
       args.addAll(['--ffmpeg-location', ffmpegPath!]);
-      final targetExt = recommendation?.targetExtension ?? 'mp4';
-      args.addAll(['--merge-output-format', targetExt]);
+      args.addAll(['--merge-output-format', mergeOutputFormat ?? 'mp4']);
 
-      if (enableDirectStreamCopy && (recommendation?.directStreamCopyPossible ?? true)) {
+      if (enableDirectStreamCopy) {
         args.addAll(['--postprocessor-args', 'ffmpeg:-c copy -movflags +faststart']);
       }
     }

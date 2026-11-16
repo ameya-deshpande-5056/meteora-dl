@@ -13,7 +13,7 @@ Accepted
 ## Decision
 1. **Simplified Download Selector (`DownloadMode` & `SimpleDownloadCommandBuilder`)**:
    - `HomeScreen` offers four direct download modes (`Video + Audio`, `Video Only`, `Audio Only`, `Subtitles Only`) alongside explicit bottom-sheet pickers for Video Resolution & Codec (single-line badges such as `1080p60`), Audio Bitrate & Codec (two-line ellipsis-free bitrate badges), and multi-select Subtitle Languages (creator + auto-generated captions via `SubtitleTrackInfo`).
-   - `SimpleDownloadCommandBuilder` generates typed `yt-dlp` argument lists, adding `--sleep-subtitles 2` when downloading subtitles. `IntelligentFormatSelector` remains available in `packages/media_engine`.
+   - `SimpleDownloadCommandBuilder` generates typed `yt-dlp` argument lists, adding `--sleep-subtitles 2` when downloading subtitles. Downloads always use the user's explicit selection; the former automatic format selector was removed so the app never silently changes quality.
 2. **Material 3 Theme Dialog & Frosted Liquid Glass Surfaces**:
    - Replaced the inline segmented button in `SettingsScreen` with a `Theme` row opening a Liquid Glass `Choose theme` dialog (`Follow System`, `Light Mode`, `Dark Mode`, `AMOLED Black`) persisted in SQLite (`app_settings`).
    - Upgraded `LiquidGlassContainer`, `LiquidGlassAppBar`, `LiquidGlassBackground`, and `AdaptiveScaffold` to render `BackdropFilter` frosted blur, directional sheen gradients, and specular rim borders on floating chrome/modals with reduced-motion fallbacks.

@@ -2,17 +2,16 @@
 
 ## Responsibilities
 `packages/media_engine` is a pure Dart domain package responsible for:
-1. Parsing yt-dlp JSON extraction output into typed models (`MediaInfo`, `FormatInfo`, `StreamType`, `AudioTrack`, `SubtitleTrack`).
-2. **Intelligent Format Selection Algorithm**:
-   - Compares available video and audio streams against device hardware capabilities.
-   - Evaluates display resolution (e.g., limits 4K downloads if display is 1080p and data is metered).
-   - Identifies hardware-supported video codecs (AV1, VP9, H.265/HEVC, H.264/AVC) and audio codecs (Opus, AAC).
-   - Balances file size vs visual quality and favors direct container muxing (`-c copy`) without re-encoding.
+1. Parsing yt-dlp JSON extraction output into typed models (`MediaInfo`, `FormatInfo`, `StreamType`, `SubtitleTrackInfo`).
+2. Device capability modelling (`DeviceCapabilities`).
+   - `DeviceCapabilities` describes the hardware and network so the UI and native layer can report what a device supports (Settings → Hardware Diagnostics).
+   - It is **not** used to pick formats automatically. There is no automatic quality or format chooser in this package; the user's explicit selection in the Home screen is what is downloaded.
 3. Building execution requests for yt-dlp:
-   - CLI parameter generation (format strings `-f`, `--merge-output-format`, `--js-runtimes`, `--extractor-args`).
+   - `SimpleDownloadCommandBuilder` produces the argument vectors the app actually runs (format strings `-f`, subtitle flags, extract-audio `-x`, `--skip-download`).
+   - `CommandBuilder` produces argument vectors for standalone Python hosts (`--js-runtimes`, `--merge-output-format`, `--ffmpeg-location`).
 
 ## Testing Mandate
 - Provide unit tests for:
   - JSON parsing of complex YouTube, Twitter, Reddit, and TikTok metadata payloads.
-  - Intelligent format selection decisions across device profiles (e.g. low-end device on mobile data vs high-end device on Wi-Fi).
-  - Stream pairing (video-only + audio-only compatibility).
+  - Format and subtitle label rendering (`videoSelectionLabel`, `audioSelectionLabel`, `SubtitleTrackInfo.displayLabel`).
+  - Command construction for every `DownloadMode`, including subtitle and audio-only paths, and `CommandBuilder` extraction/download argument vectors.

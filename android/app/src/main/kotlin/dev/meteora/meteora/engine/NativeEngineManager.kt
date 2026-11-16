@@ -25,6 +25,9 @@ object NativeEngineManager {
     @Volatile
     private var cacheDirPath: String? = null
 
+    @Volatile
+    private var jsRuntime: JsRuntimeResolver.Runtime? = null
+
     suspend fun init(context: Context): Boolean = withContext(Dispatchers.IO) {
         if (isInitialized) return@withContext true
         mutex.withLock {
@@ -34,11 +37,14 @@ object NativeEngineManager {
                 YoutubeDL.getInstance().init(context.applicationContext)
                 Log.i(TAG, "Initializing embedded FFmpeg binaries...")
                 FFmpeg.getInstance().init(context.applicationContext)
-                val cacheDir = File(context.applicationContext.cacheDir, "ytdlp-cache")
+                // Persist the remote component cache so it is not evicted like
+                // normal Android cache data between app launches.
+                val cacheDir = File(context.applicationContext.filesDir, "ytdlp-cache")
                 if (!cacheDir.exists()) {
                     cacheDir.mkdirs()
                 }
                 cacheDirPath = cacheDir.absolutePath
+                jsRuntime = JsRuntimeResolver.resolve(context.applicationContext)
                 isInitialized = true
                 val ver = getVersion(context)
                 Log.i(TAG, "Native yt-dlp engine ($ver) & FFmpeg initialized successfully.")
@@ -76,6 +82,28 @@ object NativeEngineManager {
         }
     }
 
+    /** Clears the official EJS remote-component cache for a fresh next fetch. */
+    suspend fun refreshEjsComponents(context: Context): Boolean = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val cacheDir = File(context.applicationContext.filesDir, "ytdlp-cache")
+            try {
+                if (cacheDir.exists() && !cacheDir.deleteRecursively()) {
+                    Log.w(TAG, "Unable to clear yt-dlp remote-component cache")
+                    return@withLock false
+                }
+                if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+                    Log.w(TAG, "Unable to recreate yt-dlp remote-component cache")
+                    return@withLock false
+                }
+                cacheDirPath = cacheDir.absolutePath
+                true
+            } catch (e: Throwable) {
+                Log.e(TAG, "Unable to refresh EJS components", e)
+                false
+            }
+        }
+    }
+
     private fun hasActiveIpv4Interface(): Boolean {
         return try {
             val interfaces = NetworkInterface.getNetworkInterfaces() ?: return false
@@ -105,6 +133,16 @@ object NativeEngineManager {
         if (!request.hasOption("--remote-components")) {
             request.addOption("--remote-components", "ejs:github")
         }
+        // EJS challenge solving needs a real JavaScript runtime. yt-dlp only
+        // enables deno by default, so the bundled QuickJS CLI must be enabled
+        // explicitly with its exact path.
+        jsRuntime?.let { runtime ->
+            if (!request.hasOption("--js-runtimes") && !request.hasOption("--no-js-runtimes")) {
+                val runtimeArg = "${runtime.kind.cliName}:${runtime.path}"
+                request.addOption("--js-runtimes", runtimeArg)
+                Log.i(TAG, "EJS runtime enabled: --js-runtimes $runtimeArg")
+            }
+        }
         if (!request.hasOption("--force-ipv4") && !request.hasOption("-4") && hasActiveIpv4Interface()) {
             request.addOption("--force-ipv4")
         }
@@ -124,6 +162,26 @@ object NativeEngineManager {
             YoutubeDL.getInstance().execute(request, processId)
         } else {
             YoutubeDL.getInstance().execute(request)
+        }
+    }
+
+    /** Snapshot of the JavaScript runtime used for EJS, for Settings + diagnostics. */
+    fun getJsRuntimeInfo(): Map<String, Any?> {
+        val runtime = jsRuntime
+        return if (runtime == null) {
+            mapOf(
+                "available" to false,
+                "name" to null,
+                "path" to null,
+                "version" to null,
+            )
+        } else {
+            mapOf(
+                "available" to true,
+                "name" to runtime.kind.cliName,
+                "path" to runtime.path,
+                "version" to runtime.version,
+            )
         }
     }
 

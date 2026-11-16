@@ -70,41 +70,94 @@ class PackageUpdateManager {
   }
 
   /// Downloads, verifies SHA-256, stages, and atomically commits the package.
+  ///
+  /// Every binary belonging to the package — the primary
+  /// [PackageType.executableName] plus any [PackageType.additionalExecutableNames]
+  /// (e.g. `ffprobe` alongside `ffmpeg`) — is downloaded, checksum-verified and
+  /// written into staging *before* the atomic swap. A partial or corrupt download
+  /// can therefore never leave `active/` in a mixed state.
   Future<PackageUpdateResult> installPackage({
     required PackageRelease release,
-    Uint8List? preloadedBytes, // for testing or local mocks
+    Uint8List? preloadedBytes, // for testing or local mocks (primary binary)
+    Map<String, Uint8List> preloadedAdditionalBytes = const {}, // keyed by executable name
   }) async {
+    final type = release.packageType;
+    final executables = type.allExecutableNames;
+
+    // Sanity-check that the release describes every co-shipped binary.
+    if (release.additionalDownloadUrls.length != type.additionalExecutableNames.length) {
+      return PackageUpdateResult(
+        success: false,
+        errorMessage:
+            'Release does not provide a download URL for every additional executable of ${type.displayName}',
+      );
+    }
+    if (release.additionalSha256Checksums.length != type.additionalExecutableNames.length) {
+      return PackageUpdateResult(
+        success: false,
+        errorMessage:
+            'Release does not provide a checksum for every additional executable of ${type.displayName}',
+      );
+    }
+
     try {
-      final stagingDir = await directoryManager.prepareStaging(release.packageType);
+      final stagingDir = await directoryManager.prepareStaging(type);
 
-      final Uint8List payload;
-      if (preloadedBytes != null) {
-        payload = preloadedBytes;
-      } else {
-        final resp = await httpClient.get(Uri.parse(release.downloadUrl));
-        if (resp.statusCode != 200) {
-          return PackageUpdateResult(
-            success: false,
-            errorMessage: 'HTTP ${resp.statusCode} downloading package from ${release.downloadUrl}',
-          );
+      // Download + verify every binary before writing anything to staging.
+      final Map<String, Uint8List> payloads = {};
+      String? error;
+
+      for (var i = 0; i < executables.length; i++) {
+        final name = executables[i];
+        final bool isPrimary = i == 0;
+
+        final String url;
+        final String? checksum;
+        final Uint8List? preloaded;
+        if (isPrimary) {
+          url = release.downloadUrl;
+          checksum = release.sha256Checksum;
+          preloaded = preloadedBytes;
+        } else {
+          final additionalIndex = i - 1;
+          url = release.additionalDownloadUrls[additionalIndex];
+          checksum = release.additionalSha256Checksums[additionalIndex];
+          preloaded = preloadedAdditionalBytes[name];
         }
-        payload = resp.bodyBytes;
+
+        final Uint8List payload;
+        if (preloaded != null) {
+          payload = preloaded;
+        } else {
+          final resp = await httpClient.get(Uri.parse(url));
+          if (resp.statusCode != 200) {
+            error = 'HTTP ${resp.statusCode} downloading $name from $url';
+            break;
+          }
+          payload = resp.bodyBytes;
+        }
+
+        // Checksum verification (empty/missing checksum is skipped)
+        if (checksum != null && checksum.isNotEmpty) {
+          final valid = ChecksumVerifier.verifySha256(payload, checksum);
+          if (!valid) {
+            error = 'SHA-256 Checksum verification failed for $name';
+            break;
+          }
+        }
+
+        payloads[name] = payload;
       }
 
-      // Checksum verification
-      if (release.sha256Checksum != null && release.sha256Checksum!.isNotEmpty) {
-        final valid = ChecksumVerifier.verifySha256(payload, release.sha256Checksum!);
-        if (!valid) {
-          return const PackageUpdateResult(
-            success: false,
-            errorMessage: 'SHA-256 Checksum verification failed for downloaded asset',
-          );
-        }
+      if (error != null) {
+        return PackageUpdateResult(success: false, errorMessage: error);
       }
 
-      // Write payload into staging directory
-      final destFile = File('${stagingDir.path}/${release.packageType.executableName}');
-      await destFile.writeAsBytes(payload, flush: true);
+      // Write every verified payload into the staging directory.
+      for (final entry in payloads.entries) {
+        final destFile = File('${stagingDir.path}/${entry.key}');
+        await destFile.writeAsBytes(entry.value, flush: true);
+      }
 
       // Save version metadata
       final versionFile = File('${stagingDir.path}/version.json');
@@ -112,10 +165,11 @@ class PackageUpdateManager {
         'version': release.versionTag,
         'installed_at': DateTime.now().toIso8601String(),
         'channel': release.channel.name,
+        'executables': executables,
       }));
 
-      // Atomic swap to active
-      final committed = await directoryManager.commitStaging(release.packageType);
+      // Atomic swap to active (entire package directory, all binaries together)
+      final committed = await directoryManager.commitStaging(type);
       if (!committed) {
         return const PackageUpdateResult(
           success: false,
@@ -129,7 +183,7 @@ class PackageUpdateManager {
       );
     } catch (e) {
       // Attempt rollback
-      final rolled = await directoryManager.rollback(release.packageType);
+      final rolled = await directoryManager.rollback(type);
       return PackageUpdateResult(
         success: false,
         errorMessage: e.toString(),

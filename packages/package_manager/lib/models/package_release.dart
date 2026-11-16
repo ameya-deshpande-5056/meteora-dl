@@ -13,6 +13,13 @@ class PackageRelease {
   final UpdateChannel channel;
   final int byteSize;
 
+  /// Download URLs for additional co-shipped executables (e.g. `ffprobe`),
+  /// ordered to match [PackageType.additionalExecutableNames].
+  final List<String> additionalDownloadUrls;
+  /// SHA-256 checksums for each additional download URL (parallel to above).
+  /// Empty or null entries mean "no checksum provided" for that binary.
+  final List<String?> additionalSha256Checksums;
+
   const PackageRelease({
     required this.packageType,
     required this.versionTag,
@@ -22,6 +29,8 @@ class PackageRelease {
     this.targetAbi,
     required this.channel,
     this.byteSize = 0,
+    this.additionalDownloadUrls = const [],
+    this.additionalSha256Checksums = const [],
   });
 
   factory PackageRelease.fromJson(Map<String, dynamic> json) {
@@ -40,6 +49,14 @@ class PackageRelease {
         orElse: () => UpdateChannel.stable,
       ),
       byteSize: json['byte_size'] is num ? (json['byte_size'] as num).toInt() : 0,
+      additionalDownloadUrls: (json['additional_download_urls'] as List<dynamic>?)
+              ?.whereType<String>()
+              .toList() ??
+          [],
+      additionalSha256Checksums: (json['additional_sha256_checksums'] as List<dynamic>?)
+              ?.whereType<String?>()
+              .toList() ??
+          [],
     );
   }
 
@@ -52,5 +69,7 @@ class PackageRelease {
     'target_abi': targetAbi,
     'channel': channel.name,
     'byte_size': byteSize,
+    'additional_download_urls': additionalDownloadUrls,
+    'additional_sha256_checksums': additionalSha256Checksums,
   };
 }

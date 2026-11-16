@@ -38,6 +38,20 @@ All active, staged, and backup packages reside within the app's protected intern
     └── ... (previous known-good version for rollback)
 ```
 
+> **Co-shipped binaries are updated atomically.** `ffmpeg` and `ffprobe` ship together in a single
+> `yt-dlp/FFmpeg-Builds` release archive and are modeled as one `PackageType.ffmpeg` unit. The
+> package manager downloads, SHA-256 verifies, and stages *every* binary in the package before the
+> atomic directory swap, so a partial or corrupt download can never leave `active/ffmpeg/` in a
+> mixed state (e.g. new `ffmpeg` with stale `ffprobe`). Rollback restores the entire package from
+> `backup/ffmpeg/`.
+>
+> **Note on archive extraction:** `yt-dlp/FFmpeg-Builds` publishes `ffmpeg`+`ffprobe` inside a
+> `.tar.xz` (Linux) / `.zip` (Windows) archive rather than as standalone executable assets. Pure
+> Dart cannot extract `.tar.xz` without native code, so the native integration layer is responsible
+> for extracting the archive into the separate `ffmpeg` and `ffprobe` binaries before the Dart
+> package manager installs/verifies each one. EJS (`.js` bundle), Deno and QuickJS-NG are single
+> binary/script assets and flow through the updater directly.
+
 ---
 
 ## 3. Update Channels

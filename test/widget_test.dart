@@ -66,7 +66,7 @@ void main() {
     expect(find.text('Appearance'), findsOneWidget);
     expect(find.text('Storage'), findsOneWidget);
     expect(find.text('Download Location'), findsOneWidget);
-    expect(find.text('Package Update Manager'), findsOneWidget);
+    expect(find.text('Download Engine'), findsOneWidget);
     expect(find.text('JavaScript Challenge Solver'), findsOneWidget);
     expect(find.text('Hardware Diagnostics'), findsOneWidget);
 

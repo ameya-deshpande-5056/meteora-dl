@@ -15,6 +15,7 @@ import androidx.core.content.FileProvider
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import dev.meteora.meteora.engine.NativeEngineManager
 import dev.meteora.meteora.hardware.DeviceCapabilityDetector
+import dev.meteora.meteora.hardware.DisplayModeController
 import dev.meteora.meteora.process.SafeProcessExecutor
 import dev.meteora.meteora.service.DownloadForegroundService
 import dev.meteora.meteora.storage.DownloadStorageManager
@@ -46,10 +47,21 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DisplayModeController.applyMaxRefreshRate(this)
         handleIntent(intent)
         scope.launch {
             NativeEngineManager.init(applicationContext)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The system (or an OEM power profile) can drop the window back to the
+        // panel's default mode while the app is backgrounded, so re-assert the
+        // panel's highest refresh rate on every resume and refresh the reported
+        // display capabilities for Settings -> Hardware Diagnostics.
+        DisplayModeController.applyMaxRefreshRate(this)
+        DeviceCapabilityDetector.invalidateCache()
     }
 
     override fun onRequestPermissionsResult(
@@ -187,6 +199,25 @@ class MainActivity : FlutterActivity() {
                         } catch (e: Throwable) {
                             result.error("UPDATE_ERROR", e.localizedMessage ?: "Update failed", null)
                         }
+                    }
+                }
+
+                "refreshEjsComponents" -> {
+                    scope.launch {
+                        try {
+                            result.success(NativeEngineManager.refreshEjsComponents(applicationContext))
+                        } catch (e: Throwable) {
+                            result.error("EJS_REFRESH_ERROR", e.localizedMessage ?: "EJS refresh failed", null)
+                        }
+                    }
+                }
+
+                "getJsRuntimeStatus" -> {
+                    scope.launch {
+                        if (!NativeEngineManager.isReady()) {
+                            NativeEngineManager.init(applicationContext)
+                        }
+                        result.success(NativeEngineManager.getJsRuntimeInfo())
                     }
                 }
 

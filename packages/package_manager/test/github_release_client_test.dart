@@ -86,5 +86,86 @@ void main() {
       expect(release, isNotNull);
       expect(release!.downloadUrl, contains('deno-arm64.zip'));
     });
+
+    test('matches yt-dlp-ejs JavaScript bundle asset', () async {
+      final mockEjsReleases = [
+        {
+          'tag_name': '0.8.0',
+          'prerelease': false,
+          'draft': false,
+          'published_at': '2026-03-17T22:49:33Z',
+          'assets': [
+            {
+              'name': 'yt-dlp-ejs.bundle.js',
+              'browser_download_url': 'https://github.com/yt-dlp/ejs/releases/download/0.8.0/yt-dlp-ejs.bundle.js',
+              'size': 45000,
+            },
+            {
+              'name': 'yt_dlp_ejs-0.8.0.tar.gz',
+              'browser_download_url': 'https://github.com/yt-dlp/ejs/releases/download/0.8.0/yt_dlp_ejs-0.8.0.tar.gz',
+              'size': 96571,
+            }
+          ]
+        }
+      ];
+
+      final mockClient = MockClient((request) async {
+        return http.Response(jsonEncode(mockEjsReleases), 200);
+      });
+
+      final client = GitHubReleaseClient(client: mockClient);
+      final release = await client.fetchLatestRelease(
+        packageType: PackageType.ytdlpEjs,
+        targetAbi: 'arm64-v8a',
+        channel: UpdateChannel.stable,
+      );
+
+      expect(release, isNotNull);
+      expect(release!.downloadUrl, contains('yt-dlp-ejs.bundle.js'));
+      expect(release.packageType, equals(PackageType.ytdlpEjs));
+    });
+
+    test('matches FFmpeg linux arm64 archive asset', () async {
+      final mockFfmpegReleases = [
+        {
+          'tag_name': 'latest',
+          'prerelease': false,
+          'draft': false,
+          'published_at': '2026-11-15T21:56:53Z',
+          'assets': [
+            {
+              'name': 'ffmpeg-master-latest-linuxarm64-gpl.tar.xz',
+              'browser_download_url': 'https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz',
+              'size': 126400000,
+            },
+            {
+              'name': 'ffmpeg-master-latest-linux64-gpl.tar.xz',
+              'browser_download_url': 'https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz',
+              'size': 150300000,
+            },
+            {
+              'name': 'checksums.sha256',
+              'browser_download_url': 'https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/checksums.sha256',
+              'size': 848,
+            }
+          ]
+        }
+      ];
+
+      final mockClient = MockClient((request) async {
+        return http.Response(jsonEncode(mockFfmpegReleases), 200);
+      });
+
+      final client = GitHubReleaseClient(client: mockClient);
+      final release = await client.fetchLatestRelease(
+        packageType: PackageType.ffmpeg,
+        targetAbi: 'arm64-v8a',
+        channel: UpdateChannel.stable,
+      );
+
+      expect(release, isNotNull);
+      expect(release!.downloadUrl, contains('linuxarm64-gpl.tar.xz'));
+      expect(release.packageType, equals(PackageType.ffmpeg));
+    });
   });
 }

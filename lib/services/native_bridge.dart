@@ -16,9 +16,9 @@ class DownloadLocationInfo {
   });
 
   factory DownloadLocationInfo.defaultLocation() => const DownloadLocationInfo(
-        isCustom: false,
-        displayPath: 'Internal Storage/Download',
-      );
+    isCustom: false,
+    displayPath: 'Internal Storage/Download',
+  );
 
   factory DownloadLocationInfo.fromMap(Map<dynamic, dynamic> map) {
     return DownloadLocationInfo(
@@ -28,6 +28,43 @@ class DownloadLocationInfo {
           : 'Internal Storage/Download',
       uri: map['uri'] as String?,
     );
+  }
+}
+
+@immutable
+class JsRuntimeInfo {
+  final bool available;
+  final String? name;
+  final String? path;
+  final String? version;
+
+  const JsRuntimeInfo({
+    required this.available,
+    this.name,
+    this.path,
+    this.version,
+  });
+
+  factory JsRuntimeInfo.unavailable() => const JsRuntimeInfo(available: false);
+
+  factory JsRuntimeInfo.fromMap(Map<dynamic, dynamic> map) {
+    return JsRuntimeInfo(
+      available: map['available'] as bool? ?? false,
+      name: map['name'] as String?,
+      path: map['path'] as String?,
+      version: map['version'] as String?,
+    );
+  }
+
+  String get displayName {
+    switch (name) {
+      case 'quickjs':
+        return 'QuickJS';
+      case 'deno':
+        return 'Deno';
+      default:
+        return name ?? 'JavaScript runtime';
+    }
   }
 }
 
@@ -44,10 +81,10 @@ class PermissionStatusInfo {
   });
 
   factory PermissionStatusInfo.unknown() => const PermissionStatusInfo(
-        notificationsGranted: false,
-        storageGranted: false,
-        allGranted: false,
-      );
+    notificationsGranted: false,
+    storageGranted: false,
+    allGranted: false,
+  );
 
   factory PermissionStatusInfo.fromMap(Map<dynamic, dynamic> map) {
     return PermissionStatusInfo(
@@ -59,38 +96,54 @@ class PermissionStatusInfo {
 }
 
 class NativeBridge {
-  static const MethodChannel _methodChannel = MethodChannel('dev.meteora/engine');
-  static const EventChannel _eventChannel = EventChannel('dev.meteora/downloads');
+  static const MethodChannel _methodChannel = MethodChannel(
+    'dev.meteora/engine',
+  );
+  static const EventChannel _eventChannel = EventChannel(
+    'dev.meteora/downloads',
+  );
 
   static Stream<Map<String, dynamic>>? _downloadEventStream;
 
   static Stream<Map<String, dynamic>> get downloadEvents {
-    _downloadEventStream ??= _eventChannel
-        .receiveBroadcastStream()
-        .map((event) => Map<String, dynamic>.from(event as Map));
+    _downloadEventStream ??= _eventChannel.receiveBroadcastStream().map(
+      (event) => Map<String, dynamic>.from(event as Map),
+    );
     return _downloadEventStream!;
   }
 
   static Future<DeviceCapabilities> getDeviceCapabilities() async {
     try {
-      final res = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>('getDeviceCapabilities');
+      final res = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'getDeviceCapabilities',
+      );
       if (res != null) {
-        final videoCodecs = (res['supportedVideoCodecs'] as List<dynamic>? ?? [])
-            .map((e) => e.toString().toLowerCase())
-            .toSet();
-        final audioCodecs = (res['supportedAudioCodecs'] as List<dynamic>? ?? [])
-            .map((e) => e.toString().toLowerCase())
-            .toSet();
+        final videoCodecs =
+            (res['supportedVideoCodecs'] as List<dynamic>? ?? [])
+                .map((e) => e.toString().toLowerCase())
+                .toSet();
+        final audioCodecs =
+            (res['supportedAudioCodecs'] as List<dynamic>? ?? [])
+                .map((e) => e.toString().toLowerCase())
+                .toSet();
 
         return DeviceCapabilities(
           displayWidth: (res['displayWidth'] as num?)?.toInt() ?? 1080,
           displayHeight: (res['displayHeight'] as num?)?.toInt() ?? 2400,
-          displayRefreshRate: (res['displayRefreshRate'] as num?)?.toDouble() ?? 60.0,
+          displayRefreshRate:
+              (res['displayRefreshRate'] as num?)?.toDouble() ?? 60.0,
+          displayMaxRefreshRate:
+              (res['displayMaxRefreshRate'] as num?)?.toDouble() ??
+              (res['displayRefreshRate'] as num?)?.toDouble() ??
+              60.0,
           supportedVideoCodecs: videoCodecs,
           supportedAudioCodecs: audioCodecs,
-          freeStorageBytes: (res['freeStorageBytes'] as num?)?.toInt() ?? (10 * 1024 * 1024 * 1024),
+          freeStorageBytes:
+              (res['freeStorageBytes'] as num?)?.toInt() ??
+              (10 * 1024 * 1024 * 1024),
           isMeteredNetwork: res['isMeteredNetwork'] as bool? ?? false,
-          batteryLevelPercent: (res['batteryLevelPercent'] as num?)?.toInt() ?? 100,
+          batteryLevelPercent:
+              (res['batteryLevelPercent'] as num?)?.toInt() ?? 100,
           isCharging: res['isCharging'] as bool? ?? true,
         );
       }
@@ -115,6 +168,19 @@ class NativeBridge {
     }
   }
 
+  /// Reports the JavaScript runtime yt-dlp will use for EJS challenges.
+  static Future<JsRuntimeInfo> getJsRuntimeStatus() async {
+    try {
+      final res = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'getJsRuntimeStatus',
+      );
+      if (res != null) {
+        return JsRuntimeInfo.fromMap(res);
+      }
+    } catch (_) {}
+    return JsRuntimeInfo.unavailable();
+  }
+
   static Future<String?> updateEngine() async {
     try {
       return await _methodChannel.invokeMethod<String>('updateEngine');
@@ -123,9 +189,22 @@ class NativeBridge {
     }
   }
 
+  /// Clears the cached EJS remote component. The next yt-dlp operation fetches
+  /// the current component from its official channel.
+  static Future<bool> refreshEjsComponents() async {
+    try {
+      return await _methodChannel.invokeMethod<bool>('refreshEjsComponents') ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<PermissionStatusInfo> getPermissionStatus() async {
     try {
-      final res = await _methodChannel.invokeMethod<dynamic>('getPermissionStatus');
+      final res = await _methodChannel.invokeMethod<dynamic>(
+        'getPermissionStatus',
+      );
       if (res is Map) {
         return PermissionStatusInfo.fromMap(res);
       }
@@ -135,7 +214,9 @@ class NativeBridge {
 
   static Future<PermissionStatusInfo> requestPermissions() async {
     try {
-      final res = await _methodChannel.invokeMethod<dynamic>('requestPermissions');
+      final res = await _methodChannel.invokeMethod<dynamic>(
+        'requestPermissions',
+      );
       if (res is Map) {
         return PermissionStatusInfo.fromMap(res);
       }
@@ -169,11 +250,10 @@ class NativeBridge {
     required String title,
     required List<String> command,
   }) async {
-    final res = await _methodChannel.invokeMethod<bool>('startForegroundDownload', {
-      'taskId': taskId,
-      'title': title,
-      'command': command,
-    });
+    final res = await _methodChannel.invokeMethod<bool>(
+      'startForegroundDownload',
+      {'taskId': taskId, 'title': title, 'command': command},
+    );
     return res ?? false;
   }
 
@@ -186,7 +266,9 @@ class NativeBridge {
 
   static Future<DownloadLocationInfo> getDownloadLocation() async {
     try {
-      final res = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>('getDownloadLocation');
+      final res = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'getDownloadLocation',
+      );
       if (res != null) {
         return DownloadLocationInfo.fromMap(res);
       }
@@ -196,7 +278,9 @@ class NativeBridge {
 
   static Future<DownloadLocationInfo?> pickDownloadDirectory() async {
     try {
-      final res = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>('pickDownloadDirectory');
+      final res = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'pickDownloadDirectory',
+      );
       if (res != null) {
         return DownloadLocationInfo.fromMap(res);
       }
@@ -206,7 +290,9 @@ class NativeBridge {
 
   static Future<DownloadLocationInfo> resetDownloadLocation() async {
     try {
-      final res = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>('resetDownloadLocation');
+      final res = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'resetDownloadLocation',
+      );
       if (res != null) {
         return DownloadLocationInfo.fromMap(res);
       }

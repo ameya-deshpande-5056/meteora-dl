@@ -29,12 +29,12 @@ meteora-dl/
    - Communicates with domain packages (`media_engine`, `package_manager`, `media_library`) and native services via typed repository interfaces and platform channels.
 2. **Media Engine (`packages/media_engine`)**:
    - Models extraction requests, formats, audio/video streams, subtitle tracks, thumbnails, and simplified `DownloadMode` builders (`SimpleDownloadCommandBuilder`).
-   - Contains the **Intelligent Format Selection Engine** (analyzes screen resolution, hardware codec compatibility, storage, network metered status).
+   - Builds structured yt-dlp argument vectors (`SimpleDownloadCommandBuilder` for the app, `CommandBuilder` for standalone hosts). There is deliberately no automatic quality/format chooser: the user's explicit selection is always what runs.
 3. **Package Update Manager (`packages/package_manager`)**:
    - Manages standalone updates for `yt-dlp`, `yt-dlp-ejs`, `deno`, `quickjs-ng`, `ffmpeg`, and `ffprobe`.
    - Fetches from official GitHub releases, validates SHA-256 checksums, downloads into staging directories, performs atomic swap, and retains rollback capability.
 4. **Media Library (`packages/media_library`)**:
-   - Manages indexed downloaded media, metadata persistence via SQLite (`MeteoraDatabase`), app settings (`app_settings`), tags/collections, and thumbnail caching.
+   - Manages indexed downloaded media, download task records (including each task's exact yt-dlp argument vector so it can be retried), and app settings (`app_settings`) via SQLite (`MeteoraDatabase`).
 5. **Android Native Engine (`android/`)**:
    - `DownloadForegroundService`: Persistent execution with notification controls, wake locks, crash/error recovery (`403`/`429` fallbacks), and retry handling.
    - Secure process execution via `ProcessBuilder` and typed `YoutubeDLRequest` argument vectors (no shell interpolation), with cached `ejs:github` solver components (`--cache-dir`).
@@ -49,11 +49,13 @@ meteora-dl/
 - **Android Target**: minSdk 24 (Android 7.0), targetSdk 35 (Android 15), compileSdk 35.
 - **Primary Architecture**: ARM64 (`arm64-v8a`) prioritized; ABI splits supported for size minimization.
 - **Python Runtime**: Embedded Android Python (`libpython.so`) or standalone binary managed in internal storage.
-- **JavaScript Challenge Solver**:
-  - Primary: `deno` configured with `yt-dlp-ejs`.
-  - Lightweight alternative: `quickjs-ng` (`qjs`) for minimal footprint and low RAM overhead.
-  - Security rule: JS runtimes must run sandboxed without arbitrary network or host file permissions.
+- **JavaScript Challenge Solver (EJS)**:
+  - yt-dlp requires an external JavaScript runtime to solve YouTube player-script challenges. The QuickJS CLI bundled by `youtubedl-android` (`libqjs.so`, QuickJS 2025-04-26) is the runtime.
+  - `JsRuntimeResolver` verifies the binary (ELF header + `--version`) inside `nativeLibraryDir` — the only path a targetSdk 29+ app may execute from — and `NativeEngineManager` passes it to every extraction and download as `--js-runtimes quickjs:<path>`.
+  - The solver scripts come from `--remote-components ejs:github` and are cached in a persistent `--cache-dir`, so they are fetched once.
+  - Sites that still require a login, bot check, or an unsupported capability must surface an extraction error; never bypass a bot gate or login.
 - **Media Merging**: FFmpeg stream copy (`-c copy`) without re-encoding unless format conversion is explicitly requested.
+- **High Refresh Rate**: `DisplayModeController` sets `WindowManager.LayoutParams.preferredRefreshRate` to the highest rate in `Display.getSupportedModes()` on create and on every resume, plus `Surface.setFrameRate` for Flutter's `SurfaceView` once its surface exists, so the Flutter UI (whose frame scheduling always follows display vsync) renders at the panel's real rate instead of Android's 60 Hz default. Settings → Hardware Diagnostics reports active vs. panel maximum.
 - **Storage**: SQLite (`MeteoraDatabase`) in protected app storage, plus `MediaStore.Downloads` and Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`) for public and user-selected directories.
 
 ---

@@ -81,6 +81,7 @@ class _FirstLaunchSetupDialogState extends State<FirstLaunchSetupDialog> {
         child: LiquidGlassContainer(
           padding: AppSpacing.cardPadding,
           borderRadius: AppShapes.extraLarge,
+          enableBlur: true,
           child: SingleChildScrollView(
             child: ListenableBuilder(
               listenable: DownloadStateManager.instance,

@@ -19,6 +19,11 @@ class AtomicDirectoryManager {
   File activeExecutable(PackageType type) =>
       File('${packageActiveDir(type).path}/${type.executableName}');
 
+  /// Returns every active executable for [type] (primary first, then additional
+  /// co-shipped binaries such as `ffprobe` alongside `ffmpeg`).
+  List<File> activeExecutables(PackageType type) =>
+      type.allExecutableNames.map((name) => File('${packageActiveDir(type).path}/$name')).toList();
+
   /// Prepares an isolated, clean staging directory for an incoming download.
   Future<Directory> prepareStaging(PackageType type) async {
     final dir = packageStagingDir(type);

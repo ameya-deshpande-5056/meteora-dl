@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../theme/app_motion.dart';
 import '../theme/app_shapes.dart';
 import '../theme/app_spacing.dart';
 import 'liquid_glass_container.dart';
@@ -29,6 +32,12 @@ class AdaptiveScaffold extends StatelessWidget {
     required this.screens,
   });
 
+  void _select(int index) {
+    if (index == currentIndex) return;
+    HapticFeedback.selectionClick();
+    onNavigationChanged(index);
+  }
+
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
@@ -37,7 +46,7 @@ class AdaptiveScaffold extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     if (isWide) {
-      // Tablet / Landscape floating Liquid Glass NavigationRail
+      // Tablet / landscape floating Liquid Glass navigation rail.
       return Scaffold(
         body: LiquidGlassBackground(
           child: Row(
@@ -57,7 +66,7 @@ class AdaptiveScaffold extends StatelessWidget {
                     child: NavigationRail(
                       backgroundColor: Colors.transparent,
                       selectedIndex: currentIndex,
-                      onDestinationSelected: onNavigationChanged,
+                      onDestinationSelected: _select,
                       labelType: NavigationRailLabelType.all,
                       leading: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -90,7 +99,7 @@ class AdaptiveScaffold extends StatelessWidget {
       );
     }
 
-    // Mobile Portrait Floating Liquid Glass Navigation Bar
+    // Phone dock: floating glass pill with a springy selected capsule.
     return Scaffold(
       extendBody: true,
       body: IndexedStack(
@@ -108,8 +117,10 @@ class AdaptiveScaffold extends StatelessWidget {
           ),
           child: LiquidGlassContainer(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 6),
-            borderRadius: AppShapes.extraLarge,
-            blurSigma: 20,
+            borderRadius: AppShapes.full,
+            blurSigma: 14,
+            enableBlur: true,
+            style: LiquidGlassStyle.regular,
             child: Row(
               children: List.generate(destinations.length, (index) {
                 final dest = destinations[index];
@@ -121,29 +132,34 @@ class AdaptiveScaffold extends StatelessWidget {
                     selected: selected,
                     label: dest.label,
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(AppShapes.extraLarge),
-                      onTap: () => onNavigationChanged(index),
+                      borderRadius: BorderRadius.circular(AppShapes.full),
+                      onTap: () => _select(index),
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOutCubic,
+                        duration: AppMotion.medium,
+                        curve: AppMotion.spring,
                         padding: const EdgeInsets.symmetric(vertical: 7),
                         decoration: BoxDecoration(
                           color: selected
                               ? colorScheme.primaryContainer.withAlpha(
-                                  theme.brightness == Brightness.dark ? 150 : 190,
+                                  theme.brightness == Brightness.dark ? 165 : 205,
                                 )
                               : Colors.transparent,
-                          borderRadius: BorderRadius.circular(AppShapes.extraLarge),
+                          borderRadius: BorderRadius.circular(AppShapes.full),
                         ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              selected ? dest.selectedIcon : dest.icon,
-                              size: 22,
-                              color: selected
-                                  ? colorScheme.onPrimaryContainer
-                                  : colorScheme.onSurfaceVariant,
+                            AnimatedScale(
+                              scale: selected ? 1.12 : 1.0,
+                              duration: AppMotion.medium,
+                              curve: AppMotion.spring,
+                              child: Icon(
+                                selected ? dest.selectedIcon : dest.icon,
+                                size: 22,
+                                color: selected
+                                    ? colorScheme.onPrimaryContainer
+                                    : colorScheme.onSurfaceVariant,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             Text(

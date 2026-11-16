@@ -1,15 +1,13 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_engine/media_engine.dart';
-import 'package:package_manager/package_manager.dart';
-import 'package:path_provider/path_provider.dart';
 import '../services/native_bridge.dart';
 import '../state/download_state.dart';
 import '../theme/app_shapes.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/liquid_glass_container.dart';
+import '../widgets/wavy_progress_indicator.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onNavigateToDownloads;
@@ -28,8 +26,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final FocusNode _urlFocusNode = FocusNode();
 
   bool _isExtracting = false;
-  bool _isInstallingEngine = false;
-  bool _engineInstalled = false;
+  bool _hasUrlText = false;
   String? _errorMessage;
   MediaInfo? _extractedMedia;
   PlaylistInfo? _extractedPlaylist;
@@ -44,7 +41,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkEngineStatus();
     _checkInitialSharedUrl();
   }
 
@@ -96,17 +92,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  Future<void> _checkEngineStatus() async {
-    final installed = await NativeBridge.isEngineInstalled();
-    if (mounted) {
-      setState(() => _engineInstalled = installed);
-    }
-  }
-
   Future<void> _checkInitialSharedUrl() async {
     final shared = await NativeBridge.getInitialSharedUrl();
     if (shared != null && shared.isNotEmpty && mounted) {
       _urlController.text = shared;
+      setState(() => _hasUrlText = true);
       _extractMedia(shared);
     }
   }
@@ -116,75 +106,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final text = data?.text?.trim();
     if (text != null && text.isNotEmpty) {
       _urlController.text = text;
+      setState(() => _hasUrlText = true);
       _extractMedia(text);
-    }
-  }
-
-  Future<Map<String, dynamic>?> _fetchOEmbedMetadata(String url) async {
-    try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 4);
-      final oembedUri = Uri.parse(
-        'https://www.youtube.com/oembed?url=${Uri.encodeComponent(url)}&format=json',
-      );
-      final request = await client.getUrl(oembedUri);
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
-        return jsonDecode(body) as Map<String, dynamic>;
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  Future<void> _installEngineNow() async {
-    setState(() {
-      _isInstallingEngine = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final client = GitHubReleaseClient();
-      final release = await client.fetchLatestRelease(
-        packageType: PackageType.ytdlp,
-        targetAbi: 'arm64-v8a',
-        channel: UpdateChannel.stable,
-      );
-
-      if (release != null) {
-        final appDir = await getApplicationDocumentsDirectory();
-        final dirManager = AtomicDirectoryManager(rootPackagesDir: '${appDir.path}/packages');
-        final updateManager = PackageUpdateManager(directoryManager: dirManager);
-
-        final result = await updateManager.installPackage(release: release);
-        if (result.success && mounted) {
-          setState(() {
-            _engineInstalled = true;
-            _isInstallingEngine = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('yt-dlp engine installed successfully! Extracting streams...')),
-          );
-          if (_urlController.text.isNotEmpty) {
-            _extractMedia(_urlController.text);
-          }
-          return;
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _isInstallingEngine = false;
-          _errorMessage = 'Could not download yt-dlp release. Check internet connection or configure in Settings.';
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isInstallingEngine = false;
-          _errorMessage = 'Installation error: $e';
-        });
-      }
     }
   }
 
@@ -205,7 +128,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     try {
       // Native yt-dlp Extraction (Powered by embedded Python & FFmpeg)
-      await _checkEngineStatus();
       final command = [
         'yt-dlp',
         '--dump-single-json',
@@ -254,36 +176,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return;
       }
 
-      // 3. Fallback to oEmbed metadata preview if available
-      final oembed = await _fetchOEmbedMetadata(url);
-      if (oembed != null) {
-        final title = (oembed['title'] ?? 'Online Media Stream').toString();
-        final author = (oembed['author_name'] ?? 'Web Publisher').toString();
-        final thumb = (oembed['thumbnail_url'] ?? '').toString();
-
-        final fallbackMedia = MediaInfo(
-          id: 'web_${DateTime.now().millisecondsSinceEpoch}',
-          title: title,
-          uploader: author,
-          thumbnail: thumb.isNotEmpty ? thumb : null,
-          webpageUrl: url,
-          formats: const [],
-        );
-
-        if (mounted) {
-          setState(() {
-            _extractedMedia = fallbackMedia;
-            _engineInstalled = false;
-            _isExtracting = false;
-          });
-        }
-        return;
-      }
-
+      // The embedded engine returned an empty manifest: report it plainly
+      // instead of offering a download that cannot be built.
       if (mounted) {
         setState(() {
           _isExtracting = false;
-          _errorMessage = 'Could not extract media info for "$url". Verify the URL or install the yt-dlp engine.';
+          _errorMessage =
+              'This link returned no downloadable streams. It may require a login, '
+              'be region-locked, or use a format the engine cannot read.';
         });
       }
     } catch (e) {
@@ -321,6 +221,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     final targetUrl = _urlController.text.trim();
 
+    final command = SimpleDownloadCommandBuilder.buildCommand(
+      url: targetUrl,
+      mode: _downloadMode,
+      media: _extractedMedia,
+      selectedVideo: effectiveVideo,
+      selectedAudio: effectiveAudio,
+      selectedSubtitles: effectiveSubs,
+    );
+
     final task = DownloadTask(
       taskId: taskId,
       url: targetUrl,
@@ -331,19 +240,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       speedText: 'Connecting...',
       etaText: 'Starting...',
       status: TaskStatus.downloading,
+      command: command,
       createdAt: DateTime.now(),
     );
 
     DownloadStateManager.instance.addTask(task);
-
-    final command = SimpleDownloadCommandBuilder.buildCommand(
-      url: targetUrl,
-      mode: _downloadMode,
-      media: _extractedMedia,
-      selectedVideo: effectiveVideo,
-      selectedAudio: effectiveAudio,
-      selectedSubtitles: effectiveSubs,
-    );
 
     // Dispatch directly to native Android foreground service powered by embedded yt-dlp & FFmpeg
     NativeBridge.startForegroundDownload(
@@ -365,6 +266,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     for (final entry in selectedEntries) {
       final taskId = 'task_${entry.id}_${DateTime.now().millisecondsSinceEpoch}';
       final formatLabel = SimpleDownloadCommandBuilder.formatLabelFor(_downloadMode);
+      final command = SimpleDownloadCommandBuilder.buildCommand(
+        url: entry.url,
+        mode: _downloadMode,
+      );
 
       final task = DownloadTask(
         taskId: taskId,
@@ -376,6 +281,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         speedText: 'Queued',
         etaText: 'Waiting',
         status: TaskStatus.downloading,
+        command: command,
         createdAt: DateTime.now(),
       );
 
@@ -384,10 +290,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       NativeBridge.startForegroundDownload(
         taskId: taskId,
         title: entry.title,
-        command: SimpleDownloadCommandBuilder.buildCommand(
-          url: entry.url,
-          mode: _downloadMode,
-        ),
+        command: command,
       );
     }
 
@@ -427,6 +330,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: LiquidGlassContainer(
                   padding: AppSpacing.cardPadding,
                   borderRadius: AppShapes.extraLarge,
+                  enableBlur: true,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxHeight: MediaQuery.of(context).size.height * 0.72,
@@ -587,6 +491,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             child: LiquidGlassContainer(
               padding: AppSpacing.cardPadding,
               borderRadius: AppShapes.extraLarge,
+              enableBlur: true,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(sheetContext).size.height * 0.65,
@@ -730,6 +635,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             child: LiquidGlassContainer(
               padding: AppSpacing.cardPadding,
               borderRadius: AppShapes.extraLarge,
+              enableBlur: true,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(sheetContext).size.height * 0.6,
@@ -912,6 +818,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: LiquidGlassContainer(
                   padding: AppSpacing.cardPadding,
                   borderRadius: AppShapes.extraLarge,
+                  enableBlur: true,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxHeight: MediaQuery.of(sheetContext).size.height * 0.7,
@@ -1227,16 +1134,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(vertical: 10),
                         ),
-                        onChanged: (_) => setState(() {}),
+                        // Only rebuild when the field becomes empty or non-empty;
+                        // a setState per keystroke re-laid-out every glass card.
+                        onChanged: (value) {
+                          final hasText = value.trim().isNotEmpty;
+                          if (hasText != _hasUrlText) {
+                            setState(() => _hasUrlText = hasText);
+                          }
+                        },
                         onSubmitted: _extractMedia,
                       ),
                     ),
-                    if (_urlController.text.isNotEmpty)
+                    if (_hasUrlText)
                       IconButton(
                         icon: const Icon(Icons.clear_rounded, size: 20),
                         onPressed: () {
                           _urlController.clear();
                           setState(() {
+                            _hasUrlText = false;
                             _extractedMedia = null;
                             _extractedPlaylist = null;
                           });
@@ -1258,6 +1173,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onPressed: _isExtracting
                     ? null
                     : () => _extractMedia(_urlController.text),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                 icon: _isExtracting
                     ? const SizedBox(
                         width: 18,
@@ -1267,6 +1183,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     : const Icon(Icons.bolt_rounded),
                 label: Text(_isExtracting ? 'Analyzing streams...' : 'Inspect & Extract'),
               ),
+
+              // Expressive indeterminate wavy bar while the engine inspects.
+              if (_isExtracting) ...[
+                const SizedBox(height: AppSpacing.sm),
+                WavyProgressIndicator(height: 10, amplitude: 2.6),
+              ],
 
               if (_errorMessage != null) ...[
                 const SizedBox(height: AppSpacing.lg),
@@ -1288,52 +1210,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                       ],
                     ),
-                  ),
-                ),
-              ],
-
-              // Engine Installation Banner (shown if local binary is missing and link requires it)
-              if (!_engineInstalled) ...[
-                const SizedBox(height: AppSpacing.lg),
-                LiquidGlassContainer(
-                  padding: AppSpacing.cardPadding,
-                  borderRadius: AppShapes.large,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.hardware_rounded, color: colorScheme.primary, size: 22),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: Text(
-                              'yt-dlp Extractor Engine Required for Other Sites',
-                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'YouTube downloads work directly. To download from Instagram, Twitter/X, TikTok, and Bilibili, install the yt-dlp binary into app storage.',
-                        style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.tonalIcon(
-                          onPressed: _isInstallingEngine ? null : _installEngineNow,
-                          icon: _isInstallingEngine
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.download_rounded, size: 18),
-                          label: Text(_isInstallingEngine ? 'Installing yt-dlp engine...' : 'Install yt-dlp Extractor Engine'),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ],

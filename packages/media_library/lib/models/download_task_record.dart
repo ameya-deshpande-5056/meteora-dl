@@ -14,6 +14,10 @@ class DownloadTaskRecord {
   final String status;
   final String? filePath;
   final String? errorMessage;
+
+  /// Exact yt-dlp argument vector for this task, so a failed or interrupted
+  /// download can be resumed without re-extracting the media.
+  final List<String>? command;
   final DateTime createdAt;
 
   const DownloadTaskRecord({
@@ -29,6 +33,7 @@ class DownloadTaskRecord {
     this.status = 'queued',
     this.filePath,
     this.errorMessage,
+    this.command,
     required this.createdAt,
   });
 
@@ -54,11 +59,13 @@ class DownloadTaskRecord {
       status: status ?? this.status,
       filePath: filePath ?? this.filePath,
       errorMessage: errorMessage ?? this.errorMessage,
+      command: command,
       createdAt: createdAt,
     );
   }
 
   factory DownloadTaskRecord.fromJson(Map<String, dynamic> json) {
+    final rawCommand = json['command'];
     return DownloadTaskRecord(
       taskId: json['task_id'] as String,
       url: json['url'] as String,
@@ -72,6 +79,9 @@ class DownloadTaskRecord {
       status: (json['status'] as String?) ?? 'queued',
       filePath: json['file_path'] as String?,
       errorMessage: json['error_message'] as String?,
+      command: rawCommand is List
+          ? rawCommand.map((e) => e.toString()).toList(growable: false)
+          : null,
       createdAt: json['created_at'] != null
           ? (json['created_at'] is int
               ? DateTime.fromMillisecondsSinceEpoch(json['created_at'] as int)
@@ -93,6 +103,7 @@ class DownloadTaskRecord {
     'status': status,
     'file_path': filePath,
     'error_message': errorMessage,
+    'command': command,
     'created_at': createdAt.millisecondsSinceEpoch,
   };
 }

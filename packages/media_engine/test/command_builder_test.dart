@@ -22,31 +22,12 @@ void main() {
     });
 
     test('builds download command with stream copy and merge flags', () {
-      final rec = FormatRecommendation(
-        videoFormat: const FormatInfo(
-          formatId: '137',
-          formatNote: '1080p',
-          ext: 'mp4',
-          streamType: StreamType.videoOnly,
-        ),
-        audioFormat: const FormatInfo(
-          formatId: '140',
-          formatNote: 'audio',
-          ext: 'm4a',
-          streamType: StreamType.audioOnly,
-        ),
-        requiresMuxing: true,
-        directStreamCopyPossible: true,
-        estimatedSizeBytes: 65 * 1024 * 1024,
-        reasoning: 'Lossless MP4 mux',
-        qualityScore: 95.0,
-      );
-
       final cmd = builder.buildDownloadCommand(
         url: 'https://youtube.com/watch?v=12345',
         outputDirectory: '/storage/emulated/0/Movies/Meteora',
         outputFilenameTemplate: '%(title)s.%(ext)s',
-        recommendation: rec,
+        formatSelector: '137+140',
+        mergeOutputFormat: 'mp4',
       );
 
       expect(cmd, contains('-f'));
@@ -54,6 +35,17 @@ void main() {
       expect(cmd, contains('--ffmpeg-location'));
       expect(cmd, contains('--merge-output-format'));
       expect(cmd, contains('ffmpeg:-c copy -movflags +faststart'));
+    });
+
+    test('falls back to bestvideo+bestaudio and mp4 when no selector is given', () {
+      final cmd = builder.buildDownloadCommand(
+        url: 'https://youtube.com/watch?v=12345',
+        outputDirectory: '/tmp',
+        outputFilenameTemplate: '%(title)s.%(ext)s',
+      );
+
+      expect(cmd, containsAllInOrder(['-f', 'bestvideo+bestaudio/best']));
+      expect(cmd, containsAllInOrder(['--merge-output-format', 'mp4']));
     });
   });
 }

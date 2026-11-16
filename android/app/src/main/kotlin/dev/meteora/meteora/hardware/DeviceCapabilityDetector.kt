@@ -24,6 +24,11 @@ class DeviceCapabilityDetector(private val context: Context) {
         private const val TAG = "CapabilityDetector"
         @Volatile
         private var cachedCapabilities: Map<String, Any>? = null
+
+        /** Drops the cached snapshot, e.g. after the window's display mode changed. */
+        fun invalidateCache() {
+            cachedCapabilities = null
+        }
     }
 
     suspend fun getCapabilities(): Map<String, Any> = withContext(Dispatchers.IO) {
@@ -32,6 +37,17 @@ class DeviceCapabilityDetector(private val context: Context) {
         var width = 1080
         var height = 2400
         var refreshRate = 60.0f
+        var maxRefreshRate = 60.0f
+
+        fun readDisplayModes(display: Display?) {
+            if (display == null) return
+            try {
+                refreshRate = display.refreshRate
+                maxRefreshRate = display.supportedModes?.maxOfOrNull { it.refreshRate } ?: refreshRate
+            } catch (e: Throwable) {
+                Log.w(TAG, "Display mode inspection fallback: ${e.message}")
+            }
+        }
 
         try {
             if (context is Activity) {
@@ -40,11 +56,7 @@ class DeviceCapabilityDetector(private val context: Context) {
                     val bounds = windowMetrics.bounds
                     width = bounds.width()
                     height = bounds.height()
-                    refreshRate = try {
-                        context.display?.refreshRate ?: 60.0f
-                    } catch (_: Throwable) {
-                        60.0f
-                    }
+                    readDisplayModes(context.display)
                 } else {
                     val displayMetrics = DisplayMetrics()
                     @Suppress("DEPRECATION")
@@ -52,7 +64,7 @@ class DeviceCapabilityDetector(private val context: Context) {
                     width = displayMetrics.widthPixels
                     height = displayMetrics.heightPixels
                     @Suppress("DEPRECATION")
-                    refreshRate = context.windowManager.defaultDisplay.refreshRate
+                    readDisplayModes(context.windowManager.defaultDisplay)
                 }
             } else {
                 // Fallback for non-Activity context (e.g. background service or Application context)
@@ -64,7 +76,7 @@ class DeviceCapabilityDetector(private val context: Context) {
                     display.getRealMetrics(displayMetrics)
                     width = displayMetrics.widthPixels
                     height = displayMetrics.heightPixels
-                    refreshRate = display.refreshRate
+                    readDisplayModes(display)
                 }
             }
         } catch (e: Throwable) {
@@ -81,6 +93,7 @@ class DeviceCapabilityDetector(private val context: Context) {
             "displayWidth" to width,
             "displayHeight" to height,
             "displayRefreshRate" to refreshRate.toDouble(),
+            "displayMaxRefreshRate" to maxRefreshRate.toDouble(),
             "supportedVideoCodecs" to supportedVideoCodecs,
             "supportedAudioCodecs" to supportedAudioCodecs,
             "freeStorageBytes" to freeBytes,

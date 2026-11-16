@@ -11,7 +11,7 @@ This roadmap outlines the phased development plan for Meteora.
 
 ## Phase 2: Core Domain Logic & Engine Integration
 - [x] Media extraction entity models and typed parsing.
-- [x] Intelligent Format Selection algorithm implementation and test suite.
+- [x] Explicit user-driven format selection (`DownloadMode`, `SimpleDownloadCommandBuilder`) with typed format and subtitle labels.
 - [x] Package Update Manager (GitHub release client, SHA-256 validation, staging/rollback).
 
 ## Phase 3: Android Native Services & Process Architecture
@@ -31,6 +31,8 @@ This roadmap outlines the phased development plan for Meteora.
 - [x] Settings screen: Clean Theme picker dialog, Download Location picker/reset, Package Update Manager, and Hardware Diagnostics.
 
 ## Phase 5: External Playback, Persistence & Optimization
+- [x] Material 3 Expressive wavy progress indicators for queue and inspection states, plus springy navigation selection.
+- [x] Persisted per-task yt-dlp argument vectors so failed and interrupted downloads can be retried or resumed.
 - [x] External media player launch via `Intent.ACTION_VIEW` chooser + `FileProvider` (replacing bundled Media3/ExoPlayer for lean APK size).
 - [x] SQLite persistence (`download_tasks`, `media_items`, `app_settings`) and FFprobe metadata indexing models.
 - [x] Automated unit, database, and UI widget test suites.

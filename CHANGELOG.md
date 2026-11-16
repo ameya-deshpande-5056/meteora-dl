@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Liquid Glass, Expressive Progress & Trustworthy State
+
+### Removed
+- **Automatic Format Selection**: deleted `IntelligentFormatSelector`, `FormatRecommendation` and their test suite. Downloads now always run the user's explicit video/audio/subtitle selection.
+- **Fabricated Settings Data**: removed the hard-coded component version table, the Stable/Nightly channel control, and the Deno/QuickJS runtime picker — none of them changed how extraction or downloads ran.
+- **Dead Engine Install Prompt**: removed the Home banner that downloaded an unused yt-dlp binary, plus the oEmbed preview that offered a download with no available formats.
+
+### Added
+- **Bundled EJS JavaScript Runtime**: `JsRuntimeResolver` verifies the QuickJS CLI that `youtubedl-android` ships as `libqjs.so` (ELF header + `--version`, executed from `nativeLibraryDir`, the only path a targetSdk 29+ app may exec) and `NativeEngineManager` passes it to every extraction and download as `--js-runtimes quickjs:<path>`, alongside the cached `ejs:github` solver components. Settings reports whether the runtime is ACTIVE or MISSING.
+- **iOS-style Liquid Glass**: `LiquidGlassContainer` now composites real backdrop blur, a directional vibrancy gradient, a two-tone specular rim with inset highlight, a top-edge gloss band, and an ambient shadow/glow; `LiquidGlassBackground` paints three soft light blooms for the blur to refract.
+- **Material 3 Expressive Wavy Progress (`WavyProgressIndicator`)**: determinate and indeterminate sine-wave progress with a leading cap dot, used for downloads and stream inspection, with a `LinearProgressIndicator` fallback under reduced motion.
+- **Retry & Resume**: every task persists its exact yt-dlp argument vector (`download_tasks.command`, with an automatic `ALTER TABLE` migration), so failed, cancelled and interrupted downloads can be restarted from Downloads.
+- **Failed Tab**: `DownloadsScreen` gained a third tab, and paused/interrupted tasks are listed in Active with a Resume action instead of vanishing.
+- **Library Thumbnails**: media cards show source thumbnails, duration badges, and a metadata line.
+
+### Performance
+- **Blur is now opt-in** (`LiquidGlassContainer.enableBlur`, default off). Only the dock, app bar, search bars and modal sheets/dialogs enable `BackdropFilter`; inline cards render the tint and specular rim without a per-card blur layer, which was the main source of dropped frames.
+- **UI notifications throttled to 150ms** per task (SQLite writes already throttled to 1% / 1s), so progress feeds no longer rebuild every visible card on each yt-dlp progress line.
+- **Thumbnails decode at display size** (`cacheWidth`) instead of full resolution while scrolling.
+
+### Changed
+- **Settings → Download Engine**: shows the real embedded yt-dlp version and performs a real update check, reporting the actual result or error.
+- **SQLite Progress Writes**: throttled to state changes, 1% steps or one second, instead of writing on every yt-dlp progress line.
+- **Expressive Navigation**: the dock selection capsule and icon scale now animate with a spring curve and haptic feedback; the Settings/Downloads/Library surfaces are glass panels rather than plain cards.
+
+### Fixed
+- **Invisible Failures**: download tasks in `error`, `paused` or `cancelled` state were rendered in neither tab, so failures and interrupted transfers disappeared from the UI. They are now always reachable and actionable.
+
+---
+
 ## [0.0.2] - 2026-11-11
 
 ### Streamlined UX, Accessible Downloads, External Playback & YouTube Resilience

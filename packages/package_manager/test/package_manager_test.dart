@@ -118,5 +118,116 @@ void main() {
       final active = dirMgr.activeExecutable(PackageType.ytdlp);
       expect(await active.exists(), isTrue);
     });
+
+    test('installs yt-dlp-ejs bundle and commits to active', () async {
+      final payload = Uint8List.fromList(utf8.encode('/* yt-dlp-ejs challenge solver bundle */'));
+      final validChecksum = ChecksumVerifier.computeSha256(payload);
+
+      final release = PackageRelease(
+        packageType: PackageType.ytdlpEjs,
+        versionTag: '0.8.0',
+        publishedAt: DateTime.now(),
+        downloadUrl: 'https://example.com/yt-dlp-ejs.bundle.js',
+        sha256Checksum: validChecksum,
+        channel: UpdateChannel.stable,
+      );
+
+      final result = await updater.installPackage(release: release, preloadedBytes: payload);
+      expect(result.success, isTrue);
+      expect(result.versionInstalled, equals('0.8.0'));
+
+      final active = dirMgr.activeExecutable(PackageType.ytdlpEjs);
+      expect(await active.exists(), isTrue);
+      expect(await active.readAsBytes(), equals(payload));
+    });
+
+    test('installs ffmpeg and ffprobe atomically as one package', () async {
+      final ffmpegPayload = Uint8List.fromList(utf8.encode('#!ffmpeg binary'));
+      final ffprobePayload = Uint8List.fromList(utf8.encode('#!ffprobe binary'));
+      final ffmpegChecksum = ChecksumVerifier.computeSha256(ffmpegPayload);
+      final ffprobeChecksum = ChecksumVerifier.computeSha256(ffprobePayload);
+
+      final release = PackageRelease(
+        packageType: PackageType.ffmpeg,
+        versionTag: 'latest',
+        publishedAt: DateTime.now(),
+        downloadUrl: 'https://example.com/ffmpeg',
+        sha256Checksum: ffmpegChecksum,
+        additionalDownloadUrls: const ['https://example.com/ffprobe'],
+        additionalSha256Checksums: [ffprobeChecksum],
+        channel: UpdateChannel.stable,
+      );
+
+      final result = await updater.installPackage(
+        release: release,
+        preloadedBytes: ffmpegPayload,
+        preloadedAdditionalBytes: {'ffprobe': ffprobePayload},
+      );
+      expect(result.success, isTrue);
+      expect(result.versionInstalled, equals('latest'));
+
+      // Both binaries must be present in the active directory together.
+      final activeDir = dirMgr.packageActiveDir(PackageType.ffmpeg);
+      final ffmpeg = File('${activeDir.path}/ffmpeg');
+      final ffprobe = File('${activeDir.path}/ffprobe');
+      expect(await ffmpeg.exists(), isTrue);
+      expect(await ffprobe.exists(), isTrue);
+      expect(await ffmpeg.readAsBytes(), equals(ffmpegPayload));
+      expect(await ffprobe.readAsBytes(), equals(ffprobePayload));
+
+      // activeExecutables() lists both binaries, primary first.
+      final executables = dirMgr.activeExecutables(PackageType.ffmpeg);
+      expect(executables.map((f) => f.path).toList(),
+          equals([ffmpeg.path, ffprobe.path]));
+    });
+
+    test('rejects update when a co-shipped binary checksum mismatches', () async {
+      final ffmpegPayload = Uint8List.fromList(utf8.encode('#!ffmpeg binary'));
+      final ffprobePayload = Uint8List.fromList(utf8.encode('#!ffprobe binary'));
+
+      final release = PackageRelease(
+        packageType: PackageType.ffmpeg,
+        versionTag: 'latest',
+        publishedAt: DateTime.now(),
+        downloadUrl: 'https://example.com/ffmpeg',
+        sha256Checksum: ChecksumVerifier.computeSha256(ffmpegPayload),
+        additionalDownloadUrls: const ['https://example.com/ffprobe'],
+        // Deliberately wrong checksum for the co-shipped ffprobe binary.
+        additionalSha256Checksums: const ['0000000000000000000000000000000000000000000000000000000000000000'],
+        channel: UpdateChannel.stable,
+      );
+
+      final result = await updater.installPackage(
+        release: release,
+        preloadedBytes: ffmpegPayload,
+        preloadedAdditionalBytes: {'ffprobe': ffprobePayload},
+      );
+      expect(result.success, isFalse);
+      expect(result.errorMessage, contains('Checksum verification failed for ffprobe'));
+
+      // Nothing must have been committed to active on a failed verification.
+      expect(await dirMgr.packageActiveDir(PackageType.ffmpeg).exists(), isFalse);
+    });
+
+    test('rejects release missing download URLs for co-shipped binaries', () async {
+      final release = PackageRelease(
+        packageType: PackageType.ffmpeg,
+        versionTag: 'latest',
+        publishedAt: DateTime.now(),
+        downloadUrl: 'https://example.com/ffmpeg',
+        sha256Checksum: 'abc',
+        // ffmpeg ships ffprobe, but no download URL was provided for it.
+        additionalDownloadUrls: const [],
+        additionalSha256Checksums: const [],
+        channel: UpdateChannel.stable,
+      );
+
+      final result = await updater.installPackage(
+        release: release,
+        preloadedBytes: Uint8List.fromList(utf8.encode('ffmpeg')),
+      );
+      expect(result.success, isFalse);
+      expect(result.errorMessage, contains('download URL for every additional executable'));
+    });
   });
 }

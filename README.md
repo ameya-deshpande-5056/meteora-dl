@@ -20,21 +20,22 @@
 
 ## 📖 Overview
 
-**Meteora (MeteoraDL)** is an elegant, native Android media downloader engineered for performance, reliability, and privacy. Built with **Flutter**, **Kotlin**, **embedded CPython 3**, **yt-dlp**, **QuickJS-NG / EJS**, and **FFmpeg**, Meteora brings full-fidelity stream extraction and background downloading directly to your device — with no Termux, root access, or external servers required.
+**Meteora (MeteoraDL)** is an elegant, native Android media downloader engineered for performance, reliability, and privacy. Built with **Flutter**, **Kotlin**, **embedded CPython 3**, **yt-dlp**, **cached EJS components**, and **FFmpeg**, Meteora brings full-fidelity stream extraction and background downloading directly to your device — with no Termux, root access, or external servers required.
 
 ---
 
 ## ✨ Features
 
 - 🎥 **1,000+ Supported Websites**: Seamless extraction and downloading from YouTube, Instagram Reels, TikTok, Twitter/X, Bilibili, Reddit, SoundCloud, Twitch, Vimeo, Facebook, and hundreds more via the embedded `yt-dlp` engine.
-- 🐍 **Embedded Python 3, NDK Runtime & EJS Caching**: Bundles CPython 3, `yt-dlp`, and `QuickJS-NG` via `youtubedl-android`, configures a persistent `ytdlp-cache` directory with `--remote-components ejs:github` for player challenge solving, and automatically applies fallback client/IPv4 recovery on `HTTP 403` and `HTTP 429` errors.
+- 🐍 **Embedded Python 3, QuickJS EJS Runtime & Caching**: Bundles CPython 3, `yt-dlp` and the QuickJS CLI via `youtubedl-android`, resolves the runtime path from the app's native library directory, passes it to every run as `--js-runtimes quickjs:<path>`, configures a persistent `ytdlp-cache` directory with `--remote-components ejs:github` for player challenge solving, and automatically applies fallback client/IPv4 recovery on `HTTP 403` and `HTTP 429` errors.
 - 🎞️ **Direct Lossless Stream Copy (FFmpeg)**: Embedded `libffmpeg.so` automatically merges separate high-resolution video streams (1080p, 1440p, 4K) and audio streams using `-c copy` without re-encoding, preserving exact original quality while saving battery.
-- 🎛️ **Simple Mode, Codec & Subtitle Picker**: Choose directly between **Video + Audio**, **Video Only**, **Audio Only**, and **Subtitles Only**, with dedicated pickers for video resolution/framerate/codec (`AV1`, `VP9`, `H.265`, `H.264`), audio bitrate/codec (`Opus`, `AAC`), and creator or auto-generated subtitle languages (alongside hardware-aware capability detection in `media_engine`).
+- 🎛️ **Simple Mode, Codec & Subtitle Picker**: Choose directly between **Video + Audio**, **Video Only**, **Audio Only**, and **Subtitles Only**, with dedicated pickers for video resolution/framerate/codec (`AV1`, `VP9`, `H.265`, `H.264`), audio bitrate/codec (`Opus`, `AAC`), and creator or auto-generated subtitle languages.
 - ⚡ **Persistent Background Downloads**: Powered by a robust Kotlin `DownloadForegroundService` with notification progress bars, real-time speed (MB/s), ETA calculations, retries, and Wi-Fi/wake locks to prevent OEM task termination.
 - 🔄 **In-App Over-The-Air Engine Updates**: Update the embedded `yt-dlp` binary dynamically from official upstream channels directly within the app without waiting for an APK release.
 - 🎨 **Material 3 Expressive & Liquid Glass**:
   - **Clean Theme Picker (`Choose theme`)**: Switch between **Follow System**, **Light Mode**, **Dark Mode**, and **AMOLED Black** (`#000000`) with preview swatches persisted in SQLite, plus Android 12+ **Dynamic Color (Monet)** support.
-  - **Frosted Liquid Glass**: Real-time `BackdropFilter` blur, directional sheen, specular rim borders, floating bottom dock / tablet navigation rail, glass search/URL bars, and glass modal dialogs/sheets with automatic reduced-motion fallbacks.
+  - **Liquid Glass**: Directional vibrancy gradients, a two-tone specular rim with inset highlight and top-edge gloss on every surface, with real-time `BackdropFilter` blur reserved for the floating dock, app bar, search bars, and modal sheets/dialogs so scrolling stays smooth. Automatic reduced-motion fallbacks throughout.
+  - **Expressive Motion & Wavy Progress**: Score/upload bars and the queue use a Material 3 Expressive wavy progress indicator (determinate and indeterminate), springy navigation selection, and tabular figures so live speed and percentage do not jitter.
 - 📋 **Smart Clipboard & Android Share Sheet**:
   - Detects copied media links on app resume with a floating, non-intrusive one-tap inspection action.
   - Fully integrated with Android's system Share menu from any browser or app.

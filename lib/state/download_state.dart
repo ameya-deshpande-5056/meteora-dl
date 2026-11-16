@@ -36,6 +36,10 @@ class DownloadTask {
   final TaskStatus status;
   final String? filePath;
   final String? errorMessage;
+
+  /// Exact yt-dlp argument vector used to start this task. Persisting it is
+  /// what makes Retry/Resume possible after a failure or a process restart.
+  final List<String>? command;
   final DateTime createdAt;
 
   const DownloadTask({
@@ -51,8 +55,11 @@ class DownloadTask {
     this.status = TaskStatus.queued,
     this.filePath,
     this.errorMessage,
+    this.command,
     required this.createdAt,
   });
+
+  bool get canRetry => command != null && command!.isNotEmpty;
 
   DownloadTask copyWith({
     double? progressPercent,
@@ -76,6 +83,7 @@ class DownloadTask {
       status: status ?? this.status,
       filePath: filePath ?? this.filePath,
       errorMessage: errorMessage ?? this.errorMessage,
+      command: command,
       createdAt: createdAt,
     );
   }
@@ -93,6 +101,7 @@ class DownloadTask {
     status: status.name,
     filePath: filePath,
     errorMessage: errorMessage,
+    command: command,
     createdAt: createdAt,
   );
 
@@ -114,6 +123,7 @@ class DownloadTask {
       status: taskStatus,
       filePath: record.filePath,
       errorMessage: record.errorMessage,
+      command: record.command,
       createdAt: record.createdAt,
     );
   }
@@ -164,11 +174,36 @@ class DownloadStateManager extends ChangeNotifier {
   final List<MediaItem> _libraryItems = [];
 
   List<DownloadTask> get tasks => List.unmodifiable(_tasks);
+
+  /// Tasks the badge counts as live work (a paused task is not transferring).
   List<DownloadTask> get activeTasks =>
       _tasks.where((t) => t.status == TaskStatus.downloading || t.status == TaskStatus.queued).toList();
+
+  /// Everything the Active tab shows: queued, transferring, and paused tasks
+  /// waiting to be resumed.
+  List<DownloadTask> get inProgressTasks => _tasks
+      .where((t) =>
+          t.status == TaskStatus.downloading ||
+          t.status == TaskStatus.queued ||
+          t.status == TaskStatus.paused)
+      .toList();
   List<DownloadTask> get completedTasks =>
       _tasks.where((t) => t.status == TaskStatus.completed).toList();
+
+  /// Failed and cancelled tasks. These must stay visible so the user can retry
+  /// or dismiss them instead of silently losing the record.
+  List<DownloadTask> get failedTasks => _tasks
+      .where((t) => t.status == TaskStatus.error || t.status == TaskStatus.cancelled)
+      .toList();
   List<MediaItem> get libraryItems => List.unmodifiable(_libraryItems);
+
+  /// Throttling state so progress events do not write to SQLite on every tick.
+  final Map<String, int> _lastPersistAtMs = {};
+  final Map<String, double> _lastPersistedPercent = {};
+
+  /// Separate throttle for UI rebuilds. yt-dlp emits progress several times a
+  /// second; rebuilding every list for each line is what made scrolling stutter.
+  final Map<String, int> _lastNotifyAtMs = {};
 
   Future<void> init({MeteoraDatabase? db}) async {
     if (_initialized && db == null) return;
@@ -227,7 +262,8 @@ class DownloadStateManager extends ChangeNotifier {
   }) {
     final index = _tasks.indexWhere((t) => t.taskId == taskId);
     if (index != -1) {
-      final updated = _tasks[index].copyWith(
+      final previous = _tasks[index];
+      final updated = previous.copyWith(
         progressPercent: percent,
         speedText: speed,
         etaText: eta,
@@ -238,15 +274,30 @@ class DownloadStateManager extends ChangeNotifier {
       );
       _tasks[index] = updated;
 
-      _database?.updateTaskProgress(
-        taskId: taskId,
-        percent: percent,
-        speed: speed,
-        eta: eta,
-        totalSize: totalSize,
-        status: status.name,
-        filePath: filePath,
-      );
+      // Persist on state changes and at most once per 1% / 1s of progress. A
+      // yt-dlp progress line can arrive several times per second, and writing
+      // each one stalls the database without changing what the user sees.
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final lastMs = _lastPersistAtMs[taskId] ?? 0;
+      final lastPercent = _lastPersistedPercent[taskId] ?? -100.0;
+      final shouldPersist = previous.status != updated.status ||
+          updated.progressPercent >= 100.0 ||
+          (updated.progressPercent - lastPercent) >= 1.0 ||
+          (nowMs - lastMs) >= 1000;
+
+      if (shouldPersist) {
+        _database?.updateTaskProgress(
+          taskId: taskId,
+          percent: percent,
+          speed: speed,
+          eta: eta,
+          totalSize: totalSize,
+          status: status.name,
+          filePath: filePath,
+        );
+        _lastPersistAtMs[taskId] = nowMs;
+        _lastPersistedPercent[taskId] = updated.progressPercent;
+      }
 
       // If completed, add video/audio items to library (avoid misindexing subtitles-only downloads)
       if (status == TaskStatus.completed && !updated.formatLabel.startsWith('Subtitles Only')) {
@@ -269,7 +320,14 @@ class DownloadStateManager extends ChangeNotifier {
         _database?.insertOrUpdateMediaItem(item);
       }
 
-      notifyListeners();
+      final notifyAtMs = DateTime.now().millisecondsSinceEpoch;
+      final shouldNotify = previous.status != updated.status ||
+          updated.progressPercent >= 100.0 ||
+          (notifyAtMs - (_lastNotifyAtMs[taskId] ?? 0)) >= 150;
+      if (shouldNotify) {
+        _lastNotifyAtMs[taskId] = notifyAtMs;
+        notifyListeners();
+      }
     }
   }
 
@@ -302,8 +360,55 @@ class DownloadStateManager extends ChangeNotifier {
 
   void removeTask(String taskId) {
     _tasks.removeWhere((t) => t.taskId == taskId);
+    _lastPersistAtMs.remove(taskId);
+    _lastPersistedPercent.remove(taskId);
+    _lastNotifyAtMs.remove(taskId);
     _database?.deleteTask(taskId);
     notifyListeners();
+  }
+
+  /// Re-sends the stored yt-dlp argument vector for [taskId].
+  ///
+  /// Returns false when the task is unknown or was created before commands were
+  /// persisted, so the UI can explain why nothing happened.
+  Future<bool> retryTask(String taskId) async {
+    final index = _tasks.indexWhere((t) => t.taskId == taskId);
+    if (index == -1) return false;
+
+    final task = _tasks[index];
+    final command = task.command;
+    if (command == null || command.isEmpty) return false;
+
+    final restarted = DownloadTask(
+      taskId: task.taskId,
+      url: task.url,
+      title: task.title,
+      thumbnailUrl: task.thumbnailUrl,
+      formatLabel: task.formatLabel,
+      progressPercent: 0.0,
+      speedText: 'Connecting...',
+      etaText: 'Starting...',
+      totalSizeText: task.totalSizeText,
+      status: TaskStatus.downloading,
+      command: command,
+      createdAt: task.createdAt,
+    );
+
+    _tasks[index] = restarted;
+    _lastPersistedPercent[task.taskId] = -100.0;
+    _lastPersistAtMs[task.taskId] = 0;
+    _database?.insertOrUpdateTask(restarted.toRecord());
+    notifyListeners();
+
+    try {
+      return await NativeBridge.startForegroundDownload(
+        taskId: restarted.taskId,
+        title: restarted.title,
+        command: command,
+      );
+    } catch (_) {
+      return false;
+    }
   }
 
   void deleteMediaItem(String id) {
