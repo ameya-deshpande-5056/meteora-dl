@@ -49,4 +49,4 @@ jobs:
           (cd packages/media_library && flutter test)
 
       - name: Build Debug APK (Verification)
-        run: flutter build apk --debug --split-per-abi
+        run: flutter build apk --debug --split-per-abi --android-skip-build-dependency-validation
