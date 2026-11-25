@@ -1,0 +1,21 @@
+name: browser
+description: In-app WebView browser for MeteoraDL with same-app auth context bridge.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Pinned: newer releases pull webview_flutter_android, which requires
+  # compileSdk 36; this project builds against 35 (see AGENTS.md).
+  webview_flutter: 4.9.0
+  meta: ^1.15.0
+  download_engine:
+    path: ../download_engine
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

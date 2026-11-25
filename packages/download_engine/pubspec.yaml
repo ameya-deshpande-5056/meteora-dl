@@ -1,0 +1,13 @@
+name: download_engine
+description: Segmented, resumable, queue-aware download engine for MeteoraDL (inspired by qtIDM).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  meta: ^1.15.0
+
+dev_dependencies:
+  test: ^1.25.0

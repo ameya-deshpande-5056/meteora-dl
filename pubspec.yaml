@@ -18,6 +18,12 @@ dependencies:
     path: packages/package_manager
   media_library:
     path: packages/media_library
+  download_engine:
+    path: packages/download_engine
+  browser:
+    path: packages/browser
+  content_extensions:
+    path: packages/content_extensions
   sqlite3_flutter_libs: ">=0.5.24 <0.6.0"
   dynamic_color: 1.7.0
 

@@ -867,6 +867,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
 
+                _buildSectionHeader('Browser & Content', context),
+                const SizedBox(height: AppSpacing.sm),
+                LiquidGlassContainer(
+                  padding: AppSpacing.cardPadding,
+                  borderRadius: AppShapes.large,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'In-app WebView browser (beta)',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'MeteoraDL now ships an in-app browser so downloads can reuse '
+                        'the same cookies, user agent and headers as the page. '
+                        'External browsers cannot share this context on Android due to '
+                        'sandboxing.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        'Content blockers & userscripts',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'uBlock-style filters, Dark Reader-style theming and '
+                        'Violentmonkey-style userscripts are adapted for WebView. '
+                        'Full WebExtension parity requires GeckoView.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+
                 _buildSectionHeader('Hardware Diagnostics', context),
                 const SizedBox(height: AppSpacing.sm),
                 LiquidGlassContainer(

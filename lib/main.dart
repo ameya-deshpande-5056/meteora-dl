@@ -1,6 +1,7 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'screens/browser_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/library_screen.dart';
@@ -66,6 +67,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   bool _setupPromptScheduled = false;
 
+  /// URL handed over from the in-app browser; each handoff remounts Home so the
+  /// field reflects the newest pick even though the tab keeps its state.
+  String? _browserHandoffUrl;
+  int _homeHandoffSeq = 0;
+
+  void _sendFromBrowserToHome(String url) {
+    setState(() {
+      _browserHandoffUrl = url;
+      _homeHandoffSeq++;
+      _currentIndex = 0;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -112,6 +126,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           status = TaskStatus.cancelled;
         } else if (statusStr == 'error') {
           status = TaskStatus.error;
+        } else if (statusStr == 'queued') {
+          status = TaskStatus.queued;
+        } else if (statusStr == 'paused') {
+          status = TaskStatus.paused;
         }
 
         DownloadStateManager.instance.updateProgress(
@@ -155,9 +173,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           selectedIcon: Icons.settings_rounded,
           label: 'Settings',
         ),
+        AdaptiveDestination(
+          icon: Icons.public_outlined,
+          selectedIcon: Icons.public_rounded,
+          label: 'Browser',
+        ),
       ],
       screens: [
         HomeScreen(
+          key: ValueKey('home_$_homeHandoffSeq'),
+          initialUrl: _browserHandoffUrl,
           onNavigateToDownloads: () => setState(() => _currentIndex = 1),
         ),
         DownloadsScreen(
@@ -165,6 +190,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
         const LibraryScreen(),
         const SettingsScreen(),
+        BrowserScreen(onSendToHome: _sendFromBrowserToHome),
       ],
     );
   }

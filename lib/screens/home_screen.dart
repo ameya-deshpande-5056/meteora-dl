@@ -12,9 +12,14 @@ import '../widgets/wavy_progress_indicator.dart';
 class HomeScreen extends StatefulWidget {
   final VoidCallback onNavigateToDownloads;
 
+  /// Pre-fills the URL field, e.g. when the in-app browser hands over a media
+  /// URL the user picked from its capture sheet.
+  final String? initialUrl;
+
   const HomeScreen({
     super.key,
     required this.onNavigateToDownloads,
+    this.initialUrl,
   });
 
   @override
@@ -41,7 +46,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkInitialSharedUrl();
+    final initialUrl = widget.initialUrl;
+    if (initialUrl != null && initialUrl.trim().isNotEmpty) {
+      _urlController.text = initialUrl.trim();
+      _hasUrlText = true;
+    } else {
+      _checkInitialSharedUrl();
+    }
   }
 
   @override

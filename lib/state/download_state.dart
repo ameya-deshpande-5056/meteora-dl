@@ -1,6 +1,9 @@
+import 'package:download_engine/download_engine.dart'
+    show DirectDownloadPolicy, DownloadRequest;
 import 'package:flutter/foundation.dart';
 import 'package:media_library/media_library.dart';
 import 'package:path_provider/path_provider.dart';
+import '../services/direct_download_bridge.dart';
 import '../services/native_bridge.dart';
 
 enum TaskStatus {
@@ -134,6 +137,25 @@ class DownloadStateManager extends ChangeNotifier {
   DownloadStateManager._internal();
 
   static const _firstLaunchSetupKey = 'first_launch_setup_done';
+
+  /// Format label that marks a task as handled by the native segmented HTTP
+  /// transport rather than yt-dlp.
+  static const String directFormatLabel = 'HTTP Direct';
+
+  static bool isDirectTask(DownloadTask task) =>
+      task.formatLabel == directFormatLabel;
+
+  final DirectDownloadPolicy _directPolicy = const DirectDownloadPolicy();
+
+  /// Whether [url] should go through the segmented HTTP engine instead of the
+  /// media extractor. Direct files (mp4, zip, pdf, ...) do not need yt-dlp, and
+  /// yt-dlp cannot resume them as efficiently as byte ranges can.
+  bool shouldUseDirectDownload(String url, {String? contentType, String? fileName}) =>
+      _directPolicy.shouldUseDirectTransport(
+        url,
+        contentType: contentType,
+        fileName: fileName,
+      );
 
   MeteoraDatabase? _database;
   bool _initialized = false;
@@ -359,15 +381,127 @@ class DownloadStateManager extends ChangeNotifier {
   }
 
   void removeTask(String taskId) {
+    final index = _tasks.indexWhere((t) => t.taskId == taskId);
+    final wasDirect = index != -1 && isDirectTask(_tasks[index]);
     _tasks.removeWhere((t) => t.taskId == taskId);
     _lastPersistAtMs.remove(taskId);
     _lastPersistedPercent.remove(taskId);
     _lastNotifyAtMs.remove(taskId);
     _database?.deleteTask(taskId);
+    if (wasDirect) {
+      // Drops the native queue record and its staging directory; failure here
+      // only leaves orphaned bytes, not a broken UI.
+      directDownloadEngine.remove(taskId).catchError((Object _) {});
+    }
     notifyListeners();
   }
 
-  /// Re-sends the stored yt-dlp argument vector for [taskId].
+  /// Starts a plain-HTTP download through the native segmented engine.
+  ///
+  /// The record is created here first so progress events from the service find
+  /// a row to update. [headers] carries whatever auth context the caller has
+  /// (WebView cookies, user agent, referer); the native side re-validates the
+  /// URL before fetching anything.
+  Future<bool> startDirectDownload({
+    required String url,
+    required String title,
+    String? fileName,
+    String? contentType,
+    Map<String, String> headers = const {},
+    int expectedBytes = 0,
+    int maxSegments = 4,
+  }) async {
+    if (!shouldUseDirectDownload(
+      url,
+      contentType: contentType,
+      fileName: fileName,
+    )) {
+      return false;
+    }
+
+    final taskId = NativeDirectDownloadEngine.newTaskId();
+    final task = DownloadTask(
+      taskId: taskId,
+      url: url,
+      title: title,
+      formatLabel: directFormatLabel,
+      speedText: 'Queued',
+      etaText: 'Queued',
+      totalSizeText: expectedBytes > 0 ? _formatBytes(expectedBytes) : '',
+      status: TaskStatus.queued,
+      createdAt: DateTime.now(),
+    );
+    addTask(task);
+
+    final request = DownloadRequest(
+      url: url,
+      suggestedFilename: fileName,
+      headers: headers,
+      maxRetries: 5,
+      expectedBytes: expectedBytes > 0 ? expectedBytes : null,
+      maxSegments: maxSegments,
+    );
+
+    try {
+      await directDownloadEngine.enqueueWithId(taskId, request, title: title);
+      return true;
+    } catch (e) {
+      updateProgress(
+        taskId: taskId,
+        percent: 0,
+        speed: '0 B/s',
+        eta: e.toString(),
+        totalSize: '',
+        status: TaskStatus.error,
+        errorMessage: 'Could not start the download service.',
+      );
+      return false;
+    }
+  }
+
+  /// Pauses a direct download. The native queue keeps the staged `.part` file,
+  /// so resuming continues from the bytes already fetched.
+  ///
+  /// yt-dlp tasks cannot be paused once started, so they return false.
+  Future<bool> pauseTask(String taskId) async {
+    final index = _tasks.indexWhere((t) => t.taskId == taskId);
+    if (index == -1) return false;
+    final task = _tasks[index];
+    if (!isDirectTask(task)) return false;
+    if (task.status != TaskStatus.downloading &&
+        task.status != TaskStatus.queued) {
+      return false;
+    }
+
+    try {
+      await directDownloadEngine.pause(taskId);
+    } catch (_) {
+      return false;
+    }
+
+    _tasks[index] = task.copyWith(
+      status: TaskStatus.paused,
+      speedText: '0 B/s',
+      etaText: 'Paused',
+    );
+    _database?.updateTaskStatus(taskId, 'paused');
+    notifyListeners();
+    return true;
+  }
+
+  static String _formatBytes(int bytes) {
+    const kb = 1024.0;
+    const mb = kb * 1024.0;
+    const gb = mb * 1024.0;
+    final value = bytes.toDouble();
+    if (value >= gb) return '${(value / gb).toStringAsFixed(2)} GB';
+    if (value >= mb) return '${(value / mb).toStringAsFixed(1)} MB';
+    if (value >= kb) return '${(value / kb).toStringAsFixed(0)} KB';
+    return '$bytes B';
+  }
+
+  /// Re-sends the stored yt-dlp argument vector for [taskId], or resumes a
+  /// direct download whose ranges are still on disk.
   ///
   /// Returns false when the task is unknown or was created before commands were
   /// persisted, so the UI can explain why nothing happened.
@@ -376,6 +510,33 @@ class DownloadStateManager extends ChangeNotifier {
     if (index == -1) return false;
 
     final task = _tasks[index];
+    if (isDirectTask(task)) {
+      final resumed = DownloadTask(
+        taskId: task.taskId,
+        url: task.url,
+        title: task.title,
+        thumbnailUrl: task.thumbnailUrl,
+        formatLabel: task.formatLabel,
+        progressPercent: task.progressPercent,
+        speedText: 'Queued',
+        etaText: 'Queued',
+        totalSizeText: task.totalSizeText,
+        status: TaskStatus.queued,
+        createdAt: task.createdAt,
+      );
+      _tasks[index] = resumed;
+      _lastPersistedPercent[task.taskId] = task.progressPercent - 1;
+      _lastPersistAtMs[task.taskId] = 0;
+      _database?.insertOrUpdateTask(resumed.toRecord());
+      notifyListeners();
+      try {
+        await directDownloadEngine.resume(taskId);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
     final command = task.command;
     if (command == null || command.isEmpty) return false;
 
