@@ -31,7 +31,7 @@ android {
         jniLibs {
             useLegacyPackaging = true
             pickFirsts.addAll(listOf("lib/*/libc++_shared.so", "lib/*/libffmpeg.so"))
-            keepDebugSymbols.addAll(listOf("lib/*/*.zip.so"))
+            keepDebugSymbols.addAll(listOf("**/*.zip.so"))
         }
     }
 
