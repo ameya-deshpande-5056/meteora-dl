@@ -27,6 +27,63 @@ enum DownloadMode {
   const DownloadMode(this.label, this.description);
 }
 
+/// Maximum video height cap for playlist / batch downloads.
+enum BatchQualityCap {
+  best('Best', null),
+  p2160('4K', 2160),
+  p1440('1440p', 1440),
+  p1080('1080p', 1080),
+  p720('720p', 720),
+  p480('480p', 480),
+  p360('360p', 360);
+
+  final String label;
+  final int? maxHeight;
+
+  const BatchQualityCap(this.label, this.maxHeight);
+}
+
+/// Preferred video container/stream format for playlist / batch downloads.
+enum BatchVideoFormat {
+  auto('Auto', null),
+  mp4('MP4', 'mp4'),
+  webm('WebM', 'webm');
+
+  final String label;
+  final String? ext;
+
+  const BatchVideoFormat(this.label, this.ext);
+}
+
+/// Preferred audio stream/output format for playlist / batch downloads.
+enum BatchAudioFormat {
+  auto('Auto', null, null),
+  m4a('M4A', 'm4a', 'm4a'),
+  opus('Opus', 'webm', 'opus'),
+  mp3('MP3', null, 'mp3');
+
+  final String label;
+  final String? streamExt;
+  final String? audioConvertFormat;
+
+  const BatchAudioFormat(this.label, this.streamExt, this.audioConvertFormat);
+}
+
+/// Maximum audio bitrate cap for playlist / batch downloads.
+enum BatchAudioBitrateCap {
+  best('Best', null),
+  kbps320('320 kbps', 320),
+  kbps256('256 kbps', 256),
+  kbps192('192 kbps', 192),
+  kbps128('128 kbps', 128),
+  kbps96('96 kbps', 96);
+
+  final String label;
+  final int? maxAbr;
+
+  const BatchAudioBitrateCap(this.label, this.maxAbr);
+}
+
 /// Builds safe, structured yt-dlp argument lists for [DownloadMode] and
 /// user-chosen video resolution/codec, audio bitrate/codec, and subtitles.
 class SimpleDownloadCommandBuilder {
@@ -39,15 +96,27 @@ class SimpleDownloadCommandBuilder {
     FormatInfo? selectedVideo,
     FormatInfo? selectedAudio,
     List<SubtitleTrackInfo> selectedSubtitles = const [],
+    BatchQualityCap qualityCap = BatchQualityCap.best,
+    BatchVideoFormat videoFormat = BatchVideoFormat.auto,
+    BatchAudioFormat audioFormat = BatchAudioFormat.auto,
+    BatchAudioBitrateCap audioBitrate = BatchAudioBitrateCap.best,
   }) {
     switch (mode) {
       case DownloadMode.videoAudioSubtitles:
         final parts = <String>[];
         if (selectedVideo != null) {
           parts.add('${selectedVideo.resolutionLabel} ${selectedVideo.displayVideoCodec}');
+        } else {
+          if (qualityCap.maxHeight != null) parts.add('≤${qualityCap.label}');
+          if (videoFormat != BatchVideoFormat.auto) parts.add(videoFormat.label);
         }
         if (selectedAudio != null) {
           parts.add('${selectedAudio.audioBitrateLabel} ${selectedAudio.displayAudioCodec}');
+        } else {
+          if (audioBitrate.maxAbr != null) parts.add('≤${audioBitrate.label}');
+          if (audioFormat != BatchAudioFormat.auto && audioFormat != BatchAudioFormat.mp3) {
+            parts.add(audioFormat.label);
+          }
         }
         if (selectedSubtitles.isNotEmpty) {
           parts.add('${selectedSubtitles.length} sub');
@@ -62,13 +131,21 @@ class SimpleDownloadCommandBuilder {
         if (selectedVideo != null) {
           return 'Video Only (${selectedVideo.resolutionLabel} ${selectedVideo.displayVideoCodec})';
         }
-        return 'Video Only';
+        final parts = <String>[
+          if (qualityCap.maxHeight != null) '≤${qualityCap.label}',
+          if (videoFormat != BatchVideoFormat.auto) videoFormat.label,
+        ];
+        return parts.isEmpty ? 'Video Only' : 'Video Only (${parts.join(' • ')})';
 
       case DownloadMode.audioOnly:
         if (selectedAudio != null) {
           return 'Audio Only (${selectedAudio.audioBitrateLabel} ${selectedAudio.displayAudioCodec})';
         }
-        return 'Audio Only';
+        final parts = <String>[
+          if (audioBitrate.maxAbr != null) '≤${audioBitrate.label}',
+          if (audioFormat != BatchAudioFormat.auto) audioFormat.label,
+        ];
+        return parts.isEmpty ? 'Audio Only' : 'Audio Only (${parts.join(' • ')})';
 
       case DownloadMode.subtitlesOnly:
         if (selectedSubtitles.isNotEmpty) {
@@ -87,6 +164,10 @@ class SimpleDownloadCommandBuilder {
     FormatInfo? selectedVideo,
     FormatInfo? selectedAudio,
     List<SubtitleTrackInfo> selectedSubtitles = const [],
+    BatchQualityCap qualityCap = BatchQualityCap.best,
+    BatchVideoFormat videoFormat = BatchVideoFormat.auto,
+    BatchAudioFormat audioFormat = BatchAudioFormat.auto,
+    BatchAudioBitrateCap audioBitrate = BatchAudioBitrateCap.best,
   }) {
     final trimmedUrl = url.trim();
     final args = <String>[
@@ -106,7 +187,12 @@ class SimpleDownloadCommandBuilder {
         } else if (selectedAudio != null) {
           formatSelector = 'bestvideo+${selectedAudio.formatId}/best';
         } else {
-          formatSelector = 'bestvideo+bestaudio/best';
+          formatSelector = _buildBatchVideoAudioSelector(
+            qualityCap: qualityCap,
+            videoFormat: videoFormat,
+            audioFormat: audioFormat,
+            audioBitrate: audioBitrate,
+          );
         }
         args.addAll(['-f', formatSelector]);
 
@@ -128,7 +214,13 @@ class SimpleDownloadCommandBuilder {
 
       case DownloadMode.videoOnly:
         final hasSplitVideo = media != null && media.videoOnlyFormats.isNotEmpty;
-        final formatSelector = selectedVideo?.formatId ?? (hasSplitVideo ? 'bestvideo' : 'bestvideo/best');
+        final formatSelector = selectedVideo?.formatId ??
+            (hasSplitVideo
+                ? 'bestvideo'
+                : _buildBatchVideoOnlySelector(
+                    qualityCap: qualityCap,
+                    videoFormat: videoFormat,
+                  ));
         args.addAll(['-f', formatSelector]);
 
         if (selectedSubtitles.isNotEmpty) {
@@ -137,8 +229,18 @@ class SimpleDownloadCommandBuilder {
         break;
 
       case DownloadMode.audioOnly:
-        final formatSelector = selectedAudio?.formatId ?? 'bestaudio/best';
+        final formatSelector = selectedAudio?.formatId ??
+            _buildBatchAudioOnlySelector(
+              audioFormat: audioFormat,
+              audioBitrate: audioBitrate,
+            );
         args.addAll(['-f', formatSelector, '-x']);
+        if (selectedAudio == null && audioFormat.audioConvertFormat != null) {
+          args.addAll(['--audio-format', audioFormat.audioConvertFormat!]);
+          if (audioFormat == BatchAudioFormat.mp3 && audioBitrate.maxAbr != null) {
+            args.addAll(['--audio-quality', '${audioBitrate.maxAbr}K']);
+          }
+        }
         break;
 
       case DownloadMode.subtitlesOnly:
@@ -202,5 +304,62 @@ class SimpleDownloadCommandBuilder {
       '--sleep-subtitles',
       '2',
     ]);
+  }
+
+  static String _buildBatchVideoAudioSelector({
+    required BatchQualityCap qualityCap,
+    required BatchVideoFormat videoFormat,
+    required BatchAudioFormat audioFormat,
+    required BatchAudioBitrateCap audioBitrate,
+  }) {
+    final h = qualityCap.maxHeight != null ? '[height<=${qualityCap.maxHeight}]' : '';
+    final vExt = videoFormat.ext != null ? '[ext=${videoFormat.ext}]' : '';
+    final aExt = audioFormat.streamExt != null ? '[ext=${audioFormat.streamExt}]' : '';
+    final aAbr = audioBitrate.maxAbr != null ? '[abr<=${audioBitrate.maxAbr}]' : '';
+    final aFilter = '$aExt$aAbr';
+
+    final selectors = <String>{
+      if (vExt.isNotEmpty || aFilter.isNotEmpty) 'bestvideo$h$vExt+bestaudio$aFilter',
+      if (aAbr.isNotEmpty) 'bestvideo$h+bestaudio$aAbr',
+      if (h.isNotEmpty || vExt.isNotEmpty || aFilter.isNotEmpty) 'bestvideo$h+bestaudio',
+      if (h.isNotEmpty) 'best$h',
+      'bestvideo+bestaudio',
+      'best',
+    };
+    return selectors.join('/');
+  }
+
+  static String _buildBatchAudioOnlySelector({
+    required BatchAudioFormat audioFormat,
+    required BatchAudioBitrateCap audioBitrate,
+  }) {
+    final aExt = audioFormat.streamExt != null ? '[ext=${audioFormat.streamExt}]' : '';
+    final aAbr = audioBitrate.maxAbr != null ? '[abr<=${audioBitrate.maxAbr}]' : '';
+
+    final selectors = <String>{
+      if (aExt.isNotEmpty && aAbr.isNotEmpty) 'bestaudio$aExt$aAbr',
+      if (aExt.isNotEmpty) 'bestaudio$aExt',
+      if (aAbr.isNotEmpty) 'bestaudio$aAbr',
+      'bestaudio',
+      'best',
+    };
+    return selectors.join('/');
+  }
+
+  static String _buildBatchVideoOnlySelector({
+    required BatchQualityCap qualityCap,
+    required BatchVideoFormat videoFormat,
+  }) {
+    final h = qualityCap.maxHeight != null ? '[height<=${qualityCap.maxHeight}]' : '';
+    final vExt = videoFormat.ext != null ? '[ext=${videoFormat.ext}]' : '';
+
+    final selectors = <String>{
+      if (vExt.isNotEmpty) 'bestvideo$h$vExt',
+      if (h.isNotEmpty) 'bestvideo$h',
+      if (h.isNotEmpty) 'best$h',
+      'bestvideo',
+      'best',
+    };
+    return selectors.join('/');
   }
 }

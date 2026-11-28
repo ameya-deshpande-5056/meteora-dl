@@ -240,5 +240,65 @@ void main() {
       expect(cmd, containsAllInOrder(['--sub-langs', 'es']));
       expect(cmd, containsAllInOrder(['--sub-format', 'srt/vtt/best']));
     });
+
+    test('batch quality cap and format selectors build ordered fallback chains', () {
+      final cmd = SimpleDownloadCommandBuilder.buildCommand(
+        url: url,
+        mode: DownloadMode.videoAudioSubtitles,
+        qualityCap: BatchQualityCap.p1080,
+        videoFormat: BatchVideoFormat.mp4,
+        audioFormat: BatchAudioFormat.m4a,
+        audioBitrate: BatchAudioBitrateCap.kbps192,
+      );
+      expect(
+        cmd,
+        containsAllInOrder([
+          '-f',
+          'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a][abr<=192]/bestvideo[height<=1080]+bestaudio[abr<=192]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/bestvideo+bestaudio/best',
+        ]),
+      );
+
+      final label = SimpleDownloadCommandBuilder.formatLabelFor(
+        DownloadMode.videoAudioSubtitles,
+        qualityCap: BatchQualityCap.p1080,
+        videoFormat: BatchVideoFormat.mp4,
+        audioFormat: BatchAudioFormat.m4a,
+        audioBitrate: BatchAudioBitrateCap.kbps192,
+      );
+      expect(label, equals('Video + Audio (≤1080p • MP4 • ≤192 kbps • M4A)'));
+
+      final videoOnlyCmd = SimpleDownloadCommandBuilder.buildCommand(
+        url: url,
+        mode: DownloadMode.videoOnly,
+        qualityCap: BatchQualityCap.p720,
+        videoFormat: BatchVideoFormat.webm,
+      );
+      expect(
+        videoOnlyCmd,
+        containsAllInOrder([
+          '-f',
+          'bestvideo[height<=720][ext=webm]/bestvideo[height<=720]/best[height<=720]/bestvideo/best',
+        ]),
+      );
+
+      final audioOnlyMp3Cmd = SimpleDownloadCommandBuilder.buildCommand(
+        url: url,
+        mode: DownloadMode.audioOnly,
+        audioFormat: BatchAudioFormat.mp3,
+        audioBitrate: BatchAudioBitrateCap.kbps128,
+      );
+      expect(
+        audioOnlyMp3Cmd,
+        containsAllInOrder([
+          '-f',
+          'bestaudio[abr<=128]/bestaudio/best',
+          '-x',
+          '--audio-format',
+          'mp3',
+          '--audio-quality',
+          '128K',
+        ]),
+      );
+    });
   });
 }

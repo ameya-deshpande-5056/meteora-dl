@@ -41,5 +41,34 @@ void main() {
       expect(playlist.entries[1].url, contains('video_2'));
       expect(playlist.entries[2].durationSeconds, equals(980));
     });
+
+    test('parses flat-playlist entries with thumbnails array and channel fallback', () {
+      final json = {
+        '_type': 'playlist',
+        'id': 'PL_FLAT',
+        'title': 'Flat Playlist',
+        'channel': 'Channel Name',
+        'entries': [
+          {
+            'id': 'abc123',
+            'title': 'First Video',
+            'channel': 'Uploader Channel',
+            'duration': 315,
+            'thumbnails': [
+              {'url': 'https://i.ytimg.com/vi/abc123/default.jpg', 'width': 120, 'height': 90},
+              {'url': 'https://i.ytimg.com/vi/abc123/hqdefault.jpg', 'width': 480, 'height': 360},
+            ],
+          },
+        ],
+      };
+
+      final playlist = PlaylistInfo.fromJson(json);
+
+      expect(playlist.uploader, equals('Channel Name'));
+      expect(playlist.thumbnail, equals('https://i.ytimg.com/vi/abc123/hqdefault.jpg'));
+      expect(playlist.entries.single.uploader, equals('Uploader Channel'));
+      expect(playlist.entries.single.thumbnail, equals('https://i.ytimg.com/vi/abc123/hqdefault.jpg'));
+      expect(playlist.entries.single.url, equals('https://www.youtube.com/watch?v=abc123'));
+    });
   });
 }

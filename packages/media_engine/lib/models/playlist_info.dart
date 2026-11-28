@@ -18,6 +18,18 @@ class PlaylistEntry {
     this.thumbnail,
   });
 
+  static String? _parseThumbnail(Map<String, dynamic> json) {
+    final direct = json['thumbnail'] as String?;
+    if (direct != null && direct.isNotEmpty) return direct;
+    if (json['thumbnails'] is List) {
+      final thumbs = (json['thumbnails'] as List).whereType<Map<String, dynamic>>().toList();
+      if (thumbs.isNotEmpty) {
+        return thumbs.last['url'] as String?;
+      }
+    }
+    return null;
+  }
+
   factory PlaylistEntry.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] ?? '').toString();
     final url = json['url'] != null && json['url'].toString().startsWith('http')
@@ -28,9 +40,9 @@ class PlaylistEntry {
       id: id,
       title: (json['title'] ?? 'Untitled Item').toString(),
       url: url,
-      uploader: json['uploader'] as String?,
+      uploader: json['uploader'] as String? ?? json['channel'] as String?,
       durationSeconds: json['duration'] is num ? (json['duration'] as num).toInt() : null,
-      thumbnail: json['thumbnail'] as String?,
+      thumbnail: _parseThumbnail(json),
     );
   }
 
@@ -50,6 +62,7 @@ class PlaylistInfo {
   final String title;
   final String? uploader;
   final String? description;
+  final String? thumbnail;
   final int itemCount;
   final List<PlaylistEntry> entries;
 
@@ -58,6 +71,7 @@ class PlaylistInfo {
     required this.title,
     this.uploader,
     this.description,
+    this.thumbnail,
     required this.itemCount,
     required this.entries,
   });
@@ -69,11 +83,22 @@ class PlaylistInfo {
         .map((e) => PlaylistEntry.fromJson(e))
         .toList();
 
+    var thumbnail = PlaylistEntry._parseThumbnail(json);
+    if (thumbnail == null || thumbnail.isEmpty) {
+      for (final entry in parsedEntries) {
+        if (entry.thumbnail != null && entry.thumbnail!.isNotEmpty) {
+          thumbnail = entry.thumbnail;
+          break;
+        }
+      }
+    }
+
     return PlaylistInfo(
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? 'Untitled Playlist').toString(),
-      uploader: json['uploader'] as String?,
+      uploader: json['uploader'] as String? ?? json['channel'] as String?,
       description: json['description'] as String?,
+      thumbnail: thumbnail,
       itemCount: parsedEntries.length,
       entries: parsedEntries,
     );
@@ -84,6 +109,7 @@ class PlaylistInfo {
     'title': title,
     'uploader': uploader,
     'description': description,
+    'thumbnail': thumbnail,
     'item_count': itemCount,
     'entries': entries.map((e) => e.toJson()).toList(),
   };

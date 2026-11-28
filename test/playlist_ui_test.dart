@@ -8,11 +8,14 @@ import 'package:meteora/state/download_state.dart';
 
 void main() {
   testWidgets('HomeScreen detects playlist URL and presents batch controls', (WidgetTester tester) async {
+    List<String>? capturedCommand;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('dev.meteora/engine'),
       (call) async {
         if (call.method == 'isEngineInstalled') return true;
         if (call.method == 'executeExtraction') {
+          final args = call.arguments as Map<Object?, Object?>?;
+          capturedCommand = (args?['command'] as List<Object?>?)?.cast<String>();
           return jsonEncode({
             '_type': 'playlist',
             'id': 'PL1234567890',
@@ -67,14 +70,36 @@ void main() {
     await tester.tap(inspectBtn);
     await tester.pumpAndSettle();
 
+    // Verify flat-playlist flag was passed so large playlists extract quickly
+    expect(capturedCommand, isNotNull);
+    expect(capturedCommand, contains('--flat-playlist'));
+
     // Verify playlist banner appears
     expect(find.text('Detected Playlist'), findsOneWidget);
     expect(find.text('4 VIDEOS'), findsOneWidget);
     expect(find.text('Flutter Systems & Architecture Masterclass'), findsOneWidget);
+    expect(find.text('Max Quality'), findsOneWidget);
+    expect(find.text('Video Format'), findsOneWidget);
+    expect(find.text('Audio Bitrate'), findsOneWidget);
+    expect(find.text('Audio Format'), findsOneWidget);
+    expect(find.text('Best'), findsNWidgets(2));
+    expect(find.text('Auto'), findsNWidgets(2));
     expect(find.text('Batch Download (4)'), findsOneWidget);
     expect(find.text('Select Items'), findsOneWidget);
 
+    // Open Max Quality dropdown and select 1080p
+    await tester.ensureVisible(find.text('Max Quality'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Max Quality'));
+    await tester.pumpAndSettle();
+    expect(find.text('1080p'), findsOneWidget);
+    await tester.tap(find.text('1080p'));
+    await tester.pumpAndSettle();
+    expect(find.text('1080p'), findsOneWidget);
+
     // Tap Select Items to open playlist bottom sheet
+    await tester.ensureVisible(find.text('Select Items'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Select Items'));
     await tester.pumpAndSettle();
 

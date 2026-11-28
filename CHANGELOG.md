@@ -18,13 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Replaced the phone dock's static pill indicator with an iOS-inspired refractive Liquid Glass lens driven by underdamped `SpringSimulation` physics.
   - Supports continuous horizontal scrubbing across tabs with edge rubber-banding, velocity-driven droplet elongation, and haptic ticks across tab boundaries, plus a reduced-motion fallback.
   - Keeps `BackdropFilter` on the static outer container and wraps the lens in `RepaintBoundary` so 60/120 Hz motion never triggers per-frame blur re-rasterization.
+- **Playlist Batch Quality, Format & Audio Bitrate Selectors**:
+  - Added `BatchQualityCap` (`Best`, `4K`, `1440p`, `1080p`, `720p`, `480p`, `360p`), `BatchVideoFormat` (`Auto`, `MP4`, `WebM`), `BatchAudioBitrateCap` (`Best`, `320 kbps`–`96 kbps`), and `BatchAudioFormat` (`Auto`, `M4A`, `Opus`, `MP3`) for playlist downloads.
+  - Connected option rows (`_buildStreamOptionRow`) open Liquid Glass modal bottom sheets matching the single-video format pickers, with ordered `yt-dlp` fallback chains (`height<=...`, `abr<=...`, `/best`) so heterogeneous playlists download cleanly even when a video lacks the exact preferred stream.
+- **Playlist & Entry Thumbnails**:
+  - Added `PlaylistInfo.thumbnail` (with `thumbnails` array and first-entry fallbacks for `--flat-playlist` manifests) and rendered thumbnails in both the **Detected Playlist** card and the **Select Playlist Videos** sheet.
 
 ### Changed
 - **About App & Update Banner Overhaul**:
   - Replaced the placeholder gradient icon in the **About App** card and **About Meteora** dialog with the actual Meteora squircle app icon.
   - Refined the **Check for Updates** button (`FilledButton.tonalIcon`) and redesigned the update status banner with distinct states for available updates (version badge, release notes preview, and single-line **Release Notes** / **Download APK** buttons), up-to-date confirmation, and error feedback.
+- **Playlist Action Buttons Layout**:
+  - Stacked **Select Items** and **Batch Download** into full-width rows so long counts or labels never wrap unevenly next to each other.
 
 ### Fixed
+- **Slow Playlist Extraction**: Added `--flat-playlist` to `HomeScreen._extractMedia` so playlist URLs extract metadata in seconds instead of resolving every video's watch page and JS player challenge upfront, while preserving full extraction for single videos.
+- **Option Text Ellipsis Truncation**: Removed single-line ellipsis clipping in `_buildStreamOptionRow` values and `_openBatchOptionSheet` descriptions so full labels and fallback descriptions wrap cleanly.
 - **Update Banner Overflow**: Fixed a `RenderFlex` right-edge overflow on narrow viewports in the update-available action row using `Expanded` buttons with `FittedBox(fit: BoxFit.scaleDown)` single-line labels.
 
 ### Build & Tooling

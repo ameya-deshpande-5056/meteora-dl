@@ -32,6 +32,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   PlaylistInfo? _extractedPlaylist;
   final Set<String> _selectedPlaylistEntryIds = {};
   DownloadMode _downloadMode = DownloadMode.videoAudioSubtitles;
+  BatchQualityCap _batchQualityCap = BatchQualityCap.best;
+  BatchVideoFormat _batchVideoFormat = BatchVideoFormat.auto;
+  BatchAudioFormat _batchAudioFormat = BatchAudioFormat.auto;
+  BatchAudioBitrateCap _batchAudioBitrate = BatchAudioBitrateCap.best;
   FormatInfo? _selectedVideoFormat;
   FormatInfo? _selectedAudioFormat;
   final List<SubtitleTrackInfo> _selectedSubtitles = [];
@@ -128,9 +132,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     try {
       // Native yt-dlp Extraction (Powered by embedded Python & FFmpeg)
+      // --flat-playlist avoids per-video watch-page + JS challenge extraction
+      // when inspecting playlists while leaving single-video extraction intact.
       final command = [
         'yt-dlp',
         '--dump-single-json',
+        '--flat-playlist',
         '--no-warnings',
         '--no-call-home',
         '--skip-download',
@@ -265,10 +272,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     for (final entry in selectedEntries) {
       final taskId = 'task_${entry.id}_${DateTime.now().millisecondsSinceEpoch}';
-      final formatLabel = SimpleDownloadCommandBuilder.formatLabelFor(_downloadMode);
+      final formatLabel = SimpleDownloadCommandBuilder.formatLabelFor(
+        _downloadMode,
+        qualityCap: _batchQualityCap,
+        videoFormat: _batchVideoFormat,
+        audioFormat: _batchAudioFormat,
+        audioBitrate: _batchAudioBitrate,
+      );
       final command = SimpleDownloadCommandBuilder.buildCommand(
         url: entry.url,
         mode: _downloadMode,
+        qualityCap: _batchQualityCap,
+        videoFormat: _batchVideoFormat,
+        audioFormat: _batchAudioFormat,
+        audioBitrate: _batchAudioBitrate,
       );
 
       final task = DownloadTask(
@@ -414,16 +431,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     : 'Media Stream',
                                 style: theme.textTheme.bodySmall,
                               ),
-                              secondary: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
+                              secondary: ClipRRect(
+                                borderRadius: BorderRadius.circular(AppShapes.extraSmall),
+                                child: Container(
+                                  width: 56,
+                                  height: 40,
                                   color: colorScheme.surfaceContainerHigh,
-                                  borderRadius: BorderRadius.circular(AppShapes.extraSmall),
-                                ),
-                                child: Icon(
-                                  Icons.video_collection_outlined,
-                                  color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                                  child: entry.thumbnail != null && entry.thumbnail!.isNotEmpty
+                                      ? Image.network(
+                                          entry.thumbnail!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, _, __) => Icon(
+                                            Icons.video_collection_outlined,
+                                            color: isSelected
+                                                ? colorScheme.primary
+                                                : colorScheme.onSurfaceVariant,
+                                          ),
+                                        )
+                                      : Icon(
+                                          Icons.video_collection_outlined,
+                                          color: isSelected
+                                              ? colorScheme.primary
+                                              : colorScheme.onSurfaceVariant,
+                                        ),
                                 ),
                               ),
                             ),
@@ -984,8 +1014,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     const SizedBox(height: 2),
                     Text(
                       value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: enabled ? null : colorScheme.onSurface.withAlpha(110),
@@ -1004,6 +1032,232 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ),
       ),
+    );
+  }
+
+  void _openBatchOptionSheet<T>({
+    required String title,
+    required String subtitle,
+    required List<T> options,
+    required T selected,
+    required String Function(T) badgeOf,
+    required String Function(T) titleOf,
+    required String Function(T) descriptionOf,
+    required ValueChanged<T> onSelected,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final colorScheme = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+            child: LiquidGlassContainer(
+              padding: AppSpacing.cardPadding,
+              borderRadius: AppShapes.extraLarge,
+              enableBlur: true,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(sheetContext).size.height * 0.65,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: theme.textTheme.titleMedium),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+                    const Divider(height: AppSpacing.lg),
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, index) {
+                          final option = options[index];
+                          final isSelected = option == selected;
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(AppShapes.small),
+                            onTap: () {
+                              onSelected(option);
+                              Navigator.pop(sheetContext);
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    constraints: const BoxConstraints(minWidth: 74),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? colorScheme.primaryContainer
+                                          : colorScheme.surfaceContainerHigh,
+                                      borderRadius: BorderRadius.circular(AppShapes.small),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      badgeOf(option),
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: theme.textTheme.labelMedium?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected
+                                            ? colorScheme.onPrimaryContainer
+                                            : colorScheme.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.md),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          titleOf(option),
+                                          style: theme.textTheme.bodyLarge?.copyWith(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          descriptionOf(option),
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isSelected)
+                                    Icon(Icons.check_circle_rounded, color: colorScheme.primary),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPlaylistBatchOptions(BuildContext context) {
+    final showVideoRows = _downloadMode == DownloadMode.videoAudioSubtitles ||
+        _downloadMode == DownloadMode.videoOnly;
+    final showAudioRow = _downloadMode == DownloadMode.videoAudioSubtitles ||
+        _downloadMode == DownloadMode.audioOnly;
+    final audioOptions = BatchAudioFormat.values
+        .where((fmt) =>
+            _downloadMode == DownloadMode.audioOnly || fmt != BatchAudioFormat.mp3)
+        .toList();
+
+    final rowBuilders = <Widget Function(int index, int count)>[
+      if (showVideoRows) ...[
+        (index, count) => _buildStreamOptionRow(
+              context: context,
+              icon: Icons.high_quality_outlined,
+              label: 'Max Quality',
+              value: _batchQualityCap.label,
+              shape: ConnectedShapes.card.inColumn(index, count),
+              onTap: () => _openBatchOptionSheet<BatchQualityCap>(
+                title: 'Max Quality',
+                subtitle: 'Cap maximum video resolution; falls back gracefully if unavailable.',
+                options: BatchQualityCap.values,
+                selected: _batchQualityCap,
+                badgeOf: (v) => v.label,
+                titleOf: (v) => v.maxHeight == null ? 'Best Available' : 'Up to ${v.label}',
+                descriptionOf: (v) => v.maxHeight == null
+                    ? 'Highest resolution offered per video'
+                    : 'Prefers ≤${v.maxHeight}p with lower-resolution fallback',
+                onSelected: (v) => setState(() => _batchQualityCap = v),
+              ),
+            ),
+        (index, count) => _buildStreamOptionRow(
+              context: context,
+              icon: Icons.videocam_outlined,
+              label: 'Video Format',
+              value: _batchVideoFormat.label,
+              shape: ConnectedShapes.card.inColumn(index, count),
+              onTap: () => _openBatchOptionSheet<BatchVideoFormat>(
+                title: 'Video Format',
+                subtitle: 'Preferred video container for batch downloads.',
+                options: BatchVideoFormat.values,
+                selected: _batchVideoFormat,
+                badgeOf: (v) => v.label,
+                titleOf: (v) => v == BatchVideoFormat.auto ? 'Auto (Best)' : v.label,
+                descriptionOf: (v) => v.ext == null
+                    ? 'Best stream regardless of container'
+                    : 'Prefers .${v.ext} with automatic fallback',
+                onSelected: (v) => setState(() => _batchVideoFormat = v),
+              ),
+            ),
+      ],
+      if (showAudioRow) ...[
+        (index, count) => _buildStreamOptionRow(
+              context: context,
+              icon: Icons.graphic_eq_rounded,
+              label: 'Audio Bitrate',
+              value: _batchAudioBitrate.label,
+              shape: ConnectedShapes.card.inColumn(index, count),
+              onTap: () => _openBatchOptionSheet<BatchAudioBitrateCap>(
+                title: 'Audio Bitrate',
+                subtitle: 'Cap maximum audio bitrate; falls back gracefully if unavailable.',
+                options: BatchAudioBitrateCap.values,
+                selected: _batchAudioBitrate,
+                badgeOf: (v) => v.label,
+                titleOf: (v) => v.maxAbr == null ? 'Best Available' : 'Up to ${v.label}',
+                descriptionOf: (v) => v.maxAbr == null
+                    ? 'Highest audio bitrate offered per video'
+                    : 'Prefers ≤${v.maxAbr} kbps with lower-bitrate fallback',
+                onSelected: (v) => setState(() => _batchAudioBitrate = v),
+              ),
+            ),
+        (index, count) => _buildStreamOptionRow(
+              context: context,
+              icon: Icons.audiotrack_outlined,
+              label: 'Audio Format',
+              value: _batchAudioFormat.label,
+              shape: ConnectedShapes.card.inColumn(index, count),
+              onTap: () => _openBatchOptionSheet<BatchAudioFormat>(
+                title: 'Audio Format',
+                subtitle: 'Preferred audio stream or output format for batch downloads.',
+                options: audioOptions,
+                selected: _batchAudioFormat,
+                badgeOf: (v) => v.label,
+                titleOf: (v) => v == BatchAudioFormat.auto ? 'Auto (Best)' : v.label,
+                descriptionOf: (v) => v == BatchAudioFormat.auto
+                    ? 'Best audio stream offered per video'
+                    : 'Prefers ${v.label} with automatic fallback',
+                onSelected: (v) => setState(() => _batchAudioFormat = v),
+              ),
+            ),
+      ],
+    ];
+
+    if (rowBuilders.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: AppSpacing.md),
+        for (int i = 0; i < rowBuilders.length; i++) ...[
+          if (i > 0) const SizedBox(height: 2.0),
+          rowBuilders[i](i, rowBuilders.length),
+        ],
+      ],
     );
   }
 
@@ -1289,14 +1543,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(AppShapes.small),
+                              child: Container(
+                                width: 90,
+                                height: 60,
                                 color: colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(AppShapes.small),
+                                child: _extractedPlaylist!.thumbnail != null &&
+                                        _extractedPlaylist!.thumbnail!.isNotEmpty
+                                    ? Image.network(
+                                        _extractedPlaylist!.thumbnail!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, _, __) => Center(
+                                          child: Icon(
+                                            Icons.playlist_play_rounded,
+                                            color: colorScheme.primary,
+                                            size: 28,
+                                          ),
+                                        ),
+                                      )
+                                    : Center(
+                                        child: Icon(
+                                          Icons.playlist_play_rounded,
+                                          color: colorScheme.primary,
+                                          size: 28,
+                                        ),
+                                      ),
                               ),
-                              child: Icon(Icons.playlist_play_rounded, color: colorScheme.primary, size: 28),
                             ),
                             const SizedBox(width: AppSpacing.md),
                             Expanded(
@@ -1327,31 +1600,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             return ChoiceChip(
                               label: Text(mode.label),
                               selected: _downloadMode == mode,
-                              onSelected: (_) => setState(() => _downloadMode = mode),
+                              onSelected: (_) => setState(() {
+                                _downloadMode = mode;
+                                if (mode != DownloadMode.audioOnly &&
+                                    _batchAudioFormat == BatchAudioFormat.mp3) {
+                                  _batchAudioFormat = BatchAudioFormat.auto;
+                                }
+                              }),
                             );
                           }).toList(),
                         ),
+                        _buildPlaylistBatchOptions(context),
                         const SizedBox(height: AppSpacing.md),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _openPlaylistSelectionSheet,
-                                icon: const Icon(Icons.checklist_rounded, size: 18),
-                                label: const Text('Select Items'),
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: _selectedPlaylistEntryIds.isEmpty
-                                    ? null
-                                    : _startPlaylistBatchDownload,
-                                icon: const Icon(Icons.download_rounded, size: 18),
-                                label: Text('Batch Download (${_selectedPlaylistEntryIds.length})'),
-                              ),
-                            ),
-                          ],
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _openPlaylistSelectionSheet,
+                            icon: const Icon(Icons.checklist_rounded, size: 18),
+                            label: const Text('Select Items'),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _selectedPlaylistEntryIds.isEmpty
+                                ? null
+                                : _startPlaylistBatchDownload,
+                            icon: const Icon(Icons.download_rounded, size: 18),
+                            label: Text('Batch Download (${_selectedPlaylistEntryIds.length})'),
+                          ),
                         ),
                     ],
                   ),
