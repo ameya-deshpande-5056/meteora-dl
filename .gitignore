@@ -50,3 +50,8 @@ temp_downloads/
 # Coverage & Profiling
 coverage/
 *.lcov
+
+# Android signing secrets
+*.jks
+*.keystore
+key.properties
