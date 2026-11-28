@@ -17,10 +17,7 @@ meteora-dl/
 ├── packages/
 │   ├── media_engine/          # yt-dlp extraction models, format selection algorithm
 │   ├── package_manager/       # Self-updating engine for binaries (yt-dlp, deno, ffmpeg)
-│   ├── media_library/         # Media browser, FFprobe metadata extraction, collections
-│   ├── download_engine/       # Segmented/resumable queue models, scheduler, task persistence
-│   ├── browser/               # In-app WebView browser, auth-context bridge, media capture
-│   └── content_extensions/    # WebView-adapted content blocking, dark theming, userscripts
+│   └── media_library/         # Media browser, FFprobe metadata extraction, collections
 ├── docs/                      # Technical specs, architecture records (ADRs)
 └── test/                      # Unit, widget, and integration tests
 ```
@@ -39,7 +36,7 @@ meteora-dl/
 4. **Media Library (`packages/media_library`)**:
    - Manages indexed downloaded media, download task records (including each task's exact yt-dlp argument vector so it can be retried), and app settings (`app_settings`) via SQLite (`MeteoraDatabase`).
 5. **Android Native Engine (`android/`)**:
-   - `DownloadForegroundService`: Persistent execution with notification controls, wake locks, crash/error recovery (`403`/`429` fallbacks), and retry handling. It also owns `direct/DirectDownloadQueue` + `SegmentedHttpDownloader`, the plain-HTTP transport that fetches direct files as parallel byte ranges into a resumable `.part` file (ADR-009).
+   - `DownloadForegroundService`: Persistent execution with notification controls, wake locks, crash/error recovery (`403`/`429` fallbacks), and retry handling.
    - Secure process execution via `ProcessBuilder` and typed `YoutubeDLRequest` argument vectors (no shell interpolation), with cached `ejs:github` solver components (`--cache-dir`).
    - Native `DownloadStorageManager` (`MediaStore.Downloads` & SAF `ACTION_OPEN_DOCUMENT_TREE`) integration for Android 10-15 scoped storage.
    - External media player launch via `Intent.ACTION_VIEW` chooser + `FileProvider`.
@@ -105,10 +102,6 @@ meteora-dl/
   - `(cd packages/media_engine && flutter test)`
   - `(cd packages/package_manager && flutter test)`
   - `(cd packages/media_library && flutter test)`
-  - `(cd packages/browser && flutter test)`
-  - `(cd packages/download_engine && dart test)`
-  - `(cd packages/content_extensions && dart test)`
-- **Run native unit tests**: `(cd android && ./gradlew :app:testDebugUnitTest)`
 - **Build debug APK**: `flutter build apk --debug`
 - **Build ARM64 release APK**: `flutter build apk --release --target-platform android-arm64 --split-per-abi`
 

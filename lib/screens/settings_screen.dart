@@ -27,6 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   JsRuntimeInfo _jsRuntime = JsRuntimeInfo.unavailable();
 
   bool _isCheckingAppUpdate = false;
+  bool _appUpdateError = false;
   String? _appUpdateMessage;
   AppReleaseInfo? _availableAppUpdate;
 
@@ -151,7 +152,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _checkAppUpdate() async {
     setState(() {
       _isCheckingAppUpdate = true;
-      _appUpdateMessage = 'Checking GitHub for updates…';
+      _appUpdateError = false;
+      _appUpdateMessage = null;
       _availableAppUpdate = null;
     });
 
@@ -162,8 +164,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (release == null) {
         setState(() {
           _isCheckingAppUpdate = false;
+          _appUpdateError = true;
           _appUpdateMessage =
-              'Could not reach GitHub. Please check your network connection.';
+              'Could not reach GitHub. Check your connection and try again.';
         });
         return;
       }
@@ -171,23 +174,196 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final isNewer = AppUpdateService.isNewerVersion(release.tagName);
       setState(() {
         _isCheckingAppUpdate = false;
+        _appUpdateError = false;
         if (isNewer) {
           _availableAppUpdate = release;
           _appUpdateMessage =
-              'Update available: ${release.tagName} (${release.name})';
+              release.name.isNotEmpty ? release.name : release.tagName;
         } else {
           _availableAppUpdate = null;
           _appUpdateMessage =
-              'Meteora is up to date (v${AppUpdateService.currentVersion}).';
+              'You’re on the latest version (v${AppUpdateService.currentVersion}).';
         }
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isCheckingAppUpdate = false;
-        _appUpdateMessage = 'Check failed: $e';
+        _appUpdateError = true;
+        _appUpdateMessage = 'Update check failed. Please try again later.';
       });
     }
+  }
+
+  Widget _buildAppUpdateBanner(ThemeData theme) {
+    final colorScheme = theme.colorScheme;
+    final release = _availableAppUpdate;
+
+    if (release != null) {
+      final notes = release.body.trim();
+      return Container(
+        padding: AppSpacing.cardPadding,
+        decoration: BoxDecoration(
+          color: colorScheme.primaryContainer.withAlpha(185),
+          borderRadius: BorderRadius.circular(AppShapes.medium),
+          border: Border.all(
+            color: colorScheme.primary.withAlpha(70),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.new_releases_rounded,
+                  color: colorScheme.onPrimaryContainer,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Update Available',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary,
+                    borderRadius: BorderRadius.circular(AppShapes.extraSmall),
+                  ),
+                  child: Text(
+                    release.tagName,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (release.name.isNotEmpty && release.name != release.tagName) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                release.name,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            if (notes.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                notes,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onPrimaryContainer.withAlpha(210),
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colorScheme.onPrimaryContainer,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      side: BorderSide(
+                        color: colorScheme.onPrimaryContainer.withAlpha(90),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppShapes.small),
+                      ),
+                    ),
+                    onPressed: () => NativeBridge.openUrl(release.htmlUrl),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 15),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Release Notes',
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.visible,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppShapes.small),
+                      ),
+                    ),
+                    onPressed: () => NativeBridge.openUrl(
+                      release.apkDownloadUrl ?? release.htmlUrl,
+                    ),
+                    icon: const Icon(Icons.download_rounded, size: 15),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Download APK',
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.visible,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    final backgroundColor = _appUpdateError
+        ? colorScheme.errorContainer.withAlpha(170)
+        : colorScheme.surfaceContainerHighest.withAlpha(170);
+    final foregroundColor = _appUpdateError
+        ? colorScheme.onErrorContainer
+        : colorScheme.onSurfaceVariant;
+    final iconColor =
+        _appUpdateError ? colorScheme.error : colorScheme.primary;
+    final icon = _appUpdateError
+        ? Icons.error_outline_rounded
+        : Icons.check_circle_outline_rounded;
+
+    return Container(
+      padding: AppSpacing.compactCardPadding,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(AppShapes.medium),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: iconColor, size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              _appUpdateMessage!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: foregroundColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAboutAppDialog(BuildContext context) {
@@ -211,25 +387,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Row(
                   children: [
-                    Container(
+                    Image.asset(
+                      'assets/icon/app_icon_squircle.png',
                       width: 52,
                       height: 52,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            colorScheme.primary,
-                            colorScheme.tertiary,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(AppShapes.large),
-                      ),
-                      child: Icon(
-                        Icons.cloud_download_rounded,
-                        color: colorScheme.onPrimary,
-                        size: 30,
-                      ),
+                      fit: BoxFit.contain,
                     ),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
@@ -867,47 +1029,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
 
-                _buildSectionHeader('Browser & Content', context),
-                const SizedBox(height: AppSpacing.sm),
-                LiquidGlassContainer(
-                  padding: AppSpacing.cardPadding,
-                  borderRadius: AppShapes.large,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'In-app WebView browser (beta)',
-                        style: theme.textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'MeteoraDL now ships an in-app browser so downloads can reuse '
-                        'the same cookies, user agent and headers as the page. '
-                        'External browsers cannot share this context on Android due to '
-                        'sandboxing.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        'Content blockers & userscripts',
-                        style: theme.textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'uBlock-style filters, Dark Reader-style theming and '
-                        'Violentmonkey-style userscripts are adapted for WebView. '
-                        'Full WebExtension parity requires GeckoView.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-
                 _buildSectionHeader('Hardware Diagnostics', context),
                 const SizedBox(height: AppSpacing.sm),
                 LiquidGlassContainer(
@@ -1068,27 +1189,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       Row(
                         children: [
-                          Container(
+                          Image.asset(
+                            'assets/icon/app_icon_squircle.png',
                             width: 48,
                             height: 48,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  colorScheme.primary,
-                                  colorScheme.tertiary,
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(
-                                AppShapes.medium,
-                              ),
-                            ),
-                            child: Icon(
-                              Icons.cloud_download_rounded,
-                              color: colorScheme.onPrimary,
-                              size: 26,
-                            ),
+                            fit: BoxFit.contain,
                           ),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
@@ -1153,105 +1258,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: AppSpacing.md),
                       SizedBox(
                         width: double.infinity,
-                        child: OutlinedButton.icon(
+                        child: FilledButton.tonalIcon(
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppShapes.medium,
+                              ),
+                            ),
+                          ),
                           onPressed:
                               _isCheckingAppUpdate ? null : _checkAppUpdate,
                           icon: _isCheckingAppUpdate
                               ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
+                                  width: 16,
+                                  height: 16,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Icon(Icons.sync_rounded),
+                              : const Icon(Icons.system_update_alt_rounded, size: 18),
                           label: Text(
                             _isCheckingAppUpdate
-                                ? 'Checking GitHub…'
+                                ? 'Checking for updates…'
                                 : 'Check for Updates',
                           ),
                         ),
                       ),
                       if (_appUpdateMessage != null) ...[
                         const SizedBox(height: AppSpacing.md),
-                        Container(
-                          padding: AppSpacing.compactCardPadding,
-                          decoration: BoxDecoration(
-                            color: _availableAppUpdate != null
-                                ? colorScheme.primaryContainer
-                                : colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(
-                              AppShapes.small,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    _availableAppUpdate != null
-                                        ? Icons.new_releases_rounded
-                                        : Icons.info_outline_rounded,
-                                    color: _availableAppUpdate != null
-                                        ? colorScheme.onPrimaryContainer
-                                        : colorScheme.onSurfaceVariant,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: AppSpacing.sm),
-                                  Expanded(
-                                    child: Text(
-                                      _appUpdateMessage!,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: _availableAppUpdate != null
-                                            ? colorScheme.onPrimaryContainer
-                                            : colorScheme.onSurfaceVariant,
-                                        fontWeight: _availableAppUpdate != null
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (_availableAppUpdate != null) ...[
-                                const SizedBox(height: AppSpacing.sm),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton.icon(
-                                      onPressed: () {
-                                        final url =
-                                            _availableAppUpdate!.htmlUrl;
-                                        NativeBridge.openUrl(url);
-                                      },
-                                      icon: const Icon(
-                                        Icons.open_in_new_rounded,
-                                        size: 14,
-                                      ),
-                                      label: const Text('View Release'),
-                                    ),
-                                    const SizedBox(width: AppSpacing.xs),
-                                    FilledButton.icon(
-                                      onPressed: () {
-                                        final apkUrl =
-                                            _availableAppUpdate!
-                                                .apkDownloadUrl ??
-                                            _availableAppUpdate!.htmlUrl;
-                                        NativeBridge.openUrl(apkUrl);
-                                      },
-                                      icon: const Icon(
-                                        Icons.download_rounded,
-                                        size: 14,
-                                      ),
-                                      label: const Text('Download APK'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
+                        _buildAppUpdateBanner(theme),
                       ],
                     ],
                   ),

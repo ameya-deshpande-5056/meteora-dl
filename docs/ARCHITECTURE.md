@@ -8,7 +8,7 @@ Meteora is structured using clean architecture principles, maintaining a strict 
 graph TD
     subgraph UI_Presentation ["UI Presentation (Flutter/Dart)"]
         Nav["Floating Liquid Glass Dock / NavigationRail"]
-        Screens["Home / Downloads / Library / Settings / Browser / FirstLaunchSetupDialog"]
+        Screens["Home / Downloads / Library / Settings / FirstLaunchSetupDialog"]
         State["ChangeNotifier State Managers (DownloadStateManager, ThemeManager)"]
     end
 
@@ -16,9 +16,6 @@ graph TD
         Engine["Media Engine (packages/media_engine)"]
         PkgMgr["Package Update Manager (packages/package_manager)"]
         Library["Media Library & Indexer (packages/media_library)"]
-        DownloadEnginePkg["Segmented Download Engine (packages/download_engine)"]
-        BrowserPkg["In-App Browser & Capture (packages/browser)"]
-        ExtensionsPkg["WebView Content Extensions (packages/content_extensions)"]
         Storage["SQLite Database (MeteoraDatabase)"]
     end
 
@@ -38,11 +35,6 @@ graph TD
     Engine --> Storage
     Library --> Storage
     State --> Storage
-    State --> DownloadEnginePkg
-    State --> BrowserPkg
-    BrowserPkg --> DownloadEnginePkg
-    BrowserPkg --> ExtensionsPkg
-    BrowserPkg --> Engine
     
     Engine --> MethodChannel
     PkgMgr --> MethodChannel
@@ -73,7 +65,7 @@ graph TD
 ### B. Background Execution, Resilience & Storage (`android/`)
 - Long-running downloads run inside Android's `DownloadForegroundService` (`foregroundServiceType="dataSync"`).
 - Communication with Flutter happens through bidirectional channels:
-  - `MethodChannel` (`dev.meteora/engine`): `executeExtraction`, `startForegroundDownload`, `cancelDownload`, `enqueueDirectDownload`, `pauseDirectDownload`, `resumeDirectDownload`, `removeDirectDownload`, `listDirectDownloads`, `getWebViewAuthContext`, `getDownloadLocation`, `pickDownloadDirectory`, `resetDownloadLocation`, `getPermissionStatus`, `requestPermissions`, `playMedia`, `getDeviceCapabilities`, and engine version/update calls.
+  - `MethodChannel` (`dev.meteora/engine`): `executeExtraction`, `startForegroundDownload`, `cancelDownload`, `getDownloadLocation`, `pickDownloadDirectory`, `resetDownloadLocation`, `getPermissionStatus`, `requestPermissions`, `playMedia`, `getDeviceCapabilities`, and engine version/update calls.
   - `EventChannel` (`dev.meteora/downloads`): Real-time streaming progress events (`percent`, `speed`, `eta`, `totalSize`, `filePath`, `status`).
 - `DownloadForegroundService` stages output in app cache/files, applies retry counts (`--retries 5`, `--fragment-retries 10`, `--extractor-retries 3`), cleans up partial `.part`/`.ytdl` files and retries with fallback `youtube:player_client=tv,android_vr,visionos` on `HTTP 403`, and falls back to media-only download if subtitle fetching hits YouTube `HTTP 429` rate limiting.
 - Completed files are published by `DownloadStorageManager` to the public `Download` directory (`MediaStore.Downloads` / `Environment.DIRECTORY_DOWNLOADS`) by default or to a user-selected SAF tree URI (`ACTION_OPEN_DOCUMENT_TREE`). Finished media and subtitle files open in external player apps via `Intent.ACTION_VIEW` + `FileProvider`.
@@ -98,24 +90,6 @@ graph TD
   3. Set executable flags (`chmod 700`).
   4. Perform atomic directory swap with active binary directory.
   5. Retain previous version in `backup` directory for instant rollback on verification failure.
-
-### E. In-App Browser & Media Capture (`packages/browser`)
-- **Why**: Android sandboxes browsers, so cookies, user agent, referer and request headers of an external Firefox/Chrome session cannot be read. Pages loaded in the built-in WebView are the only first-party auth context available to a download.
-- **Processing**:
-  - `WebViewScreen` (`webview_flutter`) hosts pages and injects `mediaCaptureScript` on every navigation.
-  - The script reports `<video>`/`<audio>` sources and `performance` resource entries through the `MeteoraMedia` JavaScript channel (WebView has no response-header hook).
-  - `MediaCandidateCollector` drops HLS/DASH segments, de-duplicates and caps the list; `MediaProbe` classifies each URL as video/audio/HLS/DASH/subtitle/document/archive.
-  - `BrowserAuthContext` → `EngineDownloadBridge` → `DownloadRequest`, so a captured download carries the same session it was discovered in.
-  - Picked candidates: pages, HLS and DASH go to the Home extraction flow so yt-dlp still owns format selection; plain files (`DirectDownloadPolicy`) start a segmented direct download that reuses this WebView's cookies and user agent.
-
-### F. Segmented Download Engine (`packages/download_engine` + `android/.../direct`)
-- **Domain (Dart)**: `SegmentPlanner` splits a known content length into contiguous byte ranges, `DownloadScheduler` enforces a global cap plus a per-host cap, and `DownloadTaskStore` persists the queue atomically (temp file + rename, corrupt queue quarantined, interrupted `running` tasks demoted to `paused`). `DirectDownloadPolicy` routes a URL to the segmented transport or to `yt-dlp`; `DownloadEngine` is the transport-neutral facade (`NativeDirectDownloadEngine` implements it over the method channel).
-- **Native transport (Kotlin, `direct/`)**: `SegmentedHttpDownloader` probes with `Range: bytes=0-0`, then fetches N contiguous ranges in parallel over `HttpURLConnection`, writing them at their offsets into one pre-sized `.part` file (`FileChannel` positional writes). Per-range progress is persisted, so a resume only re-requests unfinished ranges; the probe and every range retry with exponential backoff, `Accept-Encoding: identity`/`If-Range` prevent mixed-version splices, and redirects are followed manually with `DirectUrlGuard` re-validated on each hop. Servers that ignore `Range` or omit `Content-Length` fall back to a single sequential stream.
-- **Queue (Kotlin)**: `DirectDownloadQueue` owns scheduling (`maxConcurrent = 3`, `maxPerHost = 1`), pause/resume/cancel, and event emission from inside `DownloadForegroundService`, so the queue survives the Flutter activity being destroyed. Finished files are published through the same `DownloadStorageManager` path as `yt-dlp` output. See ADR-009.
-
-### G. WebView Content Extensions (`packages/content_extensions`)
-- `ContentBlocker` adapts uBlock Origin / Dark Reader / Violentmonkey *behaviour* to what WebView actually offers: cosmetic filters become injected CSS, Dark Reader settings become a `filter` declaration, userscripts are URL-pattern matched and injected as JS.
-- No WebExtension API (request blocking, `chrome.*`) is claimed; that requires GeckoView.
 
 ---
 

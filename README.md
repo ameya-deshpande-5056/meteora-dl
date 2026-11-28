@@ -13,7 +13,7 @@
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.41+-02569B?logo=flutter&logoColor=white" alt="Flutter" /></a>
   <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.2+-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin" /></a>
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-7.0+-3DDC84?logo=android&logoColor=white" alt="Android" /></a>
-  <a href="https://github.com/ameya-deshpande-5056/meteora-dl/releases"><img src="https://img.shields.io/badge/Release-v0.0.4-orange.svg" alt="Release" /></a>
+  <a href="https://github.com/ameya-deshpande-5056/meteora-dl/releases"><img src="https://img.shields.io/badge/Release-v0.0.5-orange.svg" alt="Release" /></a>
 </p>
 
 ---

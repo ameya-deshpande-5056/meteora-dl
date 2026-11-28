@@ -60,8 +60,18 @@ void main() {
     await tester.scrollUntilVisible(aboutHeader, 300);
     expect(aboutHeader, findsOneWidget);
 
-    // Verify Meteora title and current version badge
+    // Verify Meteora title, actual app icon, and current version badge
     expect(find.text('Meteora'), findsAtLeastNWidgets(1));
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Image &&
+            widget.image is AssetImage &&
+            (widget.image as AssetImage).assetName == 'assets/icon/app_icon_squircle.png',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.cloud_download_rounded), findsNothing);
     expect(find.text('v${AppUpdateService.currentVersion}'), findsOneWidget);
     expect(find.text('Check for Updates'), findsOneWidget);
 
@@ -82,7 +92,17 @@ void main() {
     await tester.tap(aboutTile);
     await tester.pumpAndSettle();
 
-    // Verify dialog content
+    // Verify dialog content & actual app icon
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Image &&
+            widget.image is AssetImage &&
+            (widget.image as AssetImage).assetName == 'assets/icon/app_icon_squircle.png',
+      ),
+      findsAtLeastNWidgets(1),
+    );
+    expect(find.byIcon(Icons.cloud_download_rounded), findsNothing);
     expect(find.text('Version ${AppUpdateService.currentVersion} (Build ${AppUpdateService.currentBuildNumber})'), findsOneWidget);
     expect(find.text('Engine'), findsOneWidget);
     expect(find.text('JS Solver'), findsOneWidget);

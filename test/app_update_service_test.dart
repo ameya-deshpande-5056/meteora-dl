@@ -25,19 +25,19 @@ void main() {
     test('parses release JSON and extracts APK download URL', () async {
       const mockJson = '''
       {
-        "tag_name": "v0.0.5",
-        "name": "Meteora v0.0.5",
-        "html_url": "https://github.com/ameya-deshpande-5056/meteora-dl/releases/tag/v0.0.5",
+        "tag_name": "v0.0.6",
+        "name": "Meteora v0.0.6",
+        "html_url": "https://github.com/ameya-deshpande-5056/meteora-dl/releases/tag/v0.0.6",
         "body": "Bug fixes and improvements",
-        "published_at": "2026-11-17T12:00:00Z",
+        "published_at": "2026-11-28T12:00:00Z",
         "assets": [
           {
             "name": "checksums.txt",
             "browser_download_url": "https://github.com/.../checksums.txt"
           },
           {
-            "name": "meteora-v0.0.5-arm64-v8a.apk",
-            "browser_download_url": "https://github.com/.../meteora-v0.0.5-arm64-v8a.apk"
+            "name": "meteora-v0.0.6-arm64-v8a.apk",
+            "browser_download_url": "https://github.com/.../meteora-v0.0.6-arm64-v8a.apk"
           }
         ]
       }
@@ -48,9 +48,9 @@ void main() {
       );
 
       expect(release, isNotNull);
-      expect(release!.tagName, equals('v0.0.5'));
-      expect(release.name, equals('Meteora v0.0.5'));
-      expect(release.apkDownloadUrl, contains('meteora-v0.0.5-arm64-v8a.apk'));
+      expect(release!.tagName, equals('v0.0.6'));
+      expect(release.name, equals('Meteora v0.0.6'));
+      expect(release.apkDownloadUrl, contains('meteora-v0.0.6-arm64-v8a.apk'));
       expect(release.body, equals('Bug fixes and improvements'));
       expect(AppUpdateService.isNewerVersion(release.tagName), isTrue);
     });

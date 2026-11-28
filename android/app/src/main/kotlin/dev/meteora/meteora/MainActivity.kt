@@ -14,7 +14,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.yausername.youtubedl_android.YoutubeDLRequest
-import dev.meteora.meteora.direct.DirectDownloadStore
 import dev.meteora.meteora.engine.NativeEngineManager
 import dev.meteora.meteora.hardware.DeviceCapabilityDetector
 import dev.meteora.meteora.hardware.DisplayModeController
@@ -302,126 +301,6 @@ class MainActivity : FlutterActivity() {
                     }
                     startService(intent)
                     result.success(true)
-                }
-
-                "enqueueDirectDownload" -> {
-                    val taskId = call.argument<String>("taskId")
-                    val url = call.argument<String>("url")
-                    if (taskId.isNullOrBlank() || url.isNullOrBlank()) {
-                        result.error("INVALID_ARGS", "taskId and url are required", null)
-                        return@setMethodCallHandler
-                    }
-
-                    val headers = call.argument<Map<String, String>>("headers") ?: emptyMap()
-                    val headerBundle = Bundle().apply {
-                        headers.forEach { (key, value) -> putString(key, value) }
-                    }
-
-                    val intent = Intent(applicationContext, DownloadForegroundService::class.java).apply {
-                        action = DownloadForegroundService.ACTION_ENQUEUE_DIRECT
-                        putExtra(DownloadForegroundService.EXTRA_TASK_ID, taskId)
-                        putExtra(
-                            DownloadForegroundService.EXTRA_TITLE,
-                            call.argument<String>("title") ?: url.substringAfterLast('/'),
-                        )
-                        putExtra(DownloadForegroundService.EXTRA_DIRECT_URL, url)
-                        putExtra(
-                            DownloadForegroundService.EXTRA_DIRECT_FILENAME,
-                            call.argument<String>("fileName"),
-                        )
-                        putExtra(DownloadForegroundService.EXTRA_DIRECT_HEADERS, headerBundle)
-                        putExtra(
-                            DownloadForegroundService.EXTRA_DIRECT_EXPECTED_BYTES,
-                            (call.argument<Number>("expectedBytes") ?: 0).toLong(),
-                        )
-                        putExtra(
-                            DownloadForegroundService.EXTRA_DIRECT_MAX_SEGMENTS,
-                            (call.argument<Number>("maxSegments") ?: 4).toInt(),
-                        )
-                        putExtra(
-                            DownloadForegroundService.EXTRA_DIRECT_ALLOW_RESUME,
-                            call.argument<Boolean>("allowResume") ?: true,
-                        )
-                    }
-
-                    try {
-                        ContextCompat.startForegroundService(applicationContext, intent)
-                        result.success(true)
-                    } catch (e: Throwable) {
-                        Log.e(TAG, "Could not start the direct download service", e)
-                        result.error(
-                            "SERVICE_START_FAILED",
-                            e.localizedMessage ?: "Could not start the download service",
-                            null,
-                        )
-                    }
-                }
-
-                "pauseDirectDownload", "resumeDirectDownload", "removeDirectDownload" -> {
-                    val taskId = call.argument<String>("taskId") ?: ""
-                    if (taskId.isBlank()) {
-                        result.success(false)
-                        return@setMethodCallHandler
-                    }
-                    val action = when (call.method) {
-                        "pauseDirectDownload" -> DownloadForegroundService.ACTION_PAUSE
-                        "resumeDirectDownload" -> DownloadForegroundService.ACTION_RESUME
-                        else -> DownloadForegroundService.ACTION_REMOVE_DIRECT
-                    }
-                    val intent = Intent(applicationContext, DownloadForegroundService::class.java).apply {
-                        this.action = action
-                        putExtra(DownloadForegroundService.EXTRA_TASK_ID, taskId)
-                    }
-                    try {
-                        if (action == DownloadForegroundService.ACTION_RESUME) {
-                            ContextCompat.startForegroundService(applicationContext, intent)
-                        } else {
-                            startService(intent)
-                        }
-                        result.success(true)
-                    } catch (e: Throwable) {
-                        Log.e(TAG, "Direct download command failed: ${call.method}", e)
-                        result.success(false)
-                    }
-                }
-
-                "listDirectDownloads" -> {
-                    scope.launch {
-                        try {
-                            val store = DirectDownloadStore(File(filesDir, "direct_queue"))
-                            result.success(store.snapshot())
-                        } catch (e: Throwable) {
-                            Log.e(TAG, "Could not read the direct download queue", e)
-                            result.success(emptyList<Map<String, Any?>>())
-                        }
-                    }
-                }
-
-                "getWebViewAuthContext" -> {
-                    val url = call.argument<String>("url") ?: ""
-                    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                        result.success(null)
-                        return@setMethodCallHandler
-                    }
-                    // CookieManager and WebSettings are main-thread objects.
-                    runOnUiThread {
-                        try {
-                            val userAgent = try {
-                                android.webkit.WebSettings.getDefaultUserAgent(applicationContext)
-                            } catch (_: Throwable) {
-                                null
-                            }
-                            val cookie = try {
-                                android.webkit.CookieManager.getInstance().getCookie(url)
-                            } catch (_: Throwable) {
-                                null
-                            }
-                            result.success(mapOf("userAgent" to userAgent, "cookie" to cookie))
-                        } catch (e: Throwable) {
-                            Log.w(TAG, "Could not read WebView auth context", e)
-                            result.success(null)
-                        }
-                    }
                 }
 
                 "publishToMediaStore" -> {

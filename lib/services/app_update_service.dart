@@ -67,7 +67,7 @@ class AppReleaseInfo {
 }
 
 class AppUpdateService {
-  static const String currentVersion = '0.0.4';
+  static const String currentVersion = '0.0.5';
   static const int currentBuildNumber = 1;
   static const String githubRepo = 'ameya-deshpande-5056/meteora-dl';
   static const String githubUrl = 'https://github.com/$githubRepo';

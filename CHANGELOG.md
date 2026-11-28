@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-11-28
+
+### Liquid Glass Navigation & About / Update UI Polish
+
+### Added
+- **Scrubbable Liquid Glass Navigation Bar (`LiquidGlassNavBar`)**:
+  - Replaced the phone dock's static pill indicator with an iOS-inspired refractive Liquid Glass lens driven by underdamped `SpringSimulation` physics.
+  - Supports continuous horizontal scrubbing across tabs with edge rubber-banding, velocity-driven droplet elongation, and haptic ticks across tab boundaries, plus a reduced-motion fallback.
+  - Keeps `BackdropFilter` on the static outer container and wraps the lens in `RepaintBoundary` so 60/120 Hz motion never triggers per-frame blur re-rasterization.
+
+### Changed
+- **About App & Update Banner Overhaul**:
+  - Replaced the placeholder gradient icon in the **About App** card and **About Meteora** dialog with the actual Meteora squircle app icon.
+  - Refined the **Check for Updates** button (`FilledButton.tonalIcon`) and redesigned the update status banner with distinct states for available updates (version badge, release notes preview, and single-line **Release Notes** / **Download APK** buttons), up-to-date confirmation, and error feedback.
+
+### Fixed
+- **Update Banner Overflow**: Fixed a `RenderFlex` right-edge overflow on narrow viewports in the update-available action row using `Expanded` buttons with `FittedBox(fit: BoxFit.scaleDown)` single-line labels.
+
+### Build & Tooling
+- **Low-Memory Gradle Configuration**: Tuned `android/gradle.properties` with a 1 GB heap cap (`SerialGC`), in-process Kotlin compilation, single-worker serial execution, and Gradle build caching.
+
+### Artifacts & Downloads
+- `meteora-v0.0.5-arm64-v8a.apk` — Optimized build for modern 64-bit ARM devices (Recommended).
+- `meteora-v0.0.5-armeabi-v7a.apk` — Build for legacy 32-bit ARM devices.
+- `meteora-v0.0.5-x86_64.apk` — Build for 64-bit x86 emulators and Chromebooks.
+- `meteora-v0.0.5-universal.apk` — Universal package containing all architectures.
+- `checksums.txt` — SHA-256 cryptographic verification hashes for all APK artifacts.
+
+---
+
 ## [0.0.4] - 2026-11-16
 
 ### Material 3 Expressive Design Overhaul & Graphics Performance

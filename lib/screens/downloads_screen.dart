@@ -390,16 +390,6 @@ class _TaskCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.xs),
-                if (DownloadStateManager.isDirectTask(task))
-                  IconButton(
-                    icon: const Icon(Icons.pause_rounded, size: 20),
-                    tooltip: 'Pause download',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      HapticFeedback.selectionClick();
-                      DownloadStateManager.instance.pauseTask(task.taskId);
-                    },
-                  ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded, size: 20),
                   tooltip: 'Cancel download',
@@ -434,9 +424,7 @@ class _TaskCard extends StatelessWidget {
                   ),
                 ),
                 FilledButton.tonalIcon(
-                  onPressed: task.canRetry || DownloadStateManager.isDirectTask(task)
-                      ? () => _retry(context)
-                      : null,
+                  onPressed: task.canRetry ? () => _retry(context) : null,
                   icon: const Icon(Icons.play_arrow_rounded, size: 18),
                   label: const Text('Resume'),
                 ),
@@ -460,9 +448,7 @@ class _TaskCard extends StatelessWidget {
             Row(
               children: [
                 FilledButton.tonalIcon(
-                  onPressed: task.canRetry || DownloadStateManager.isDirectTask(task)
-                      ? () => _retry(context)
-                      : null,
+                  onPressed: task.canRetry ? () => _retry(context) : null,
                   icon: const Icon(Icons.refresh_rounded, size: 18),
                   label: const Text('Retry'),
                 ),

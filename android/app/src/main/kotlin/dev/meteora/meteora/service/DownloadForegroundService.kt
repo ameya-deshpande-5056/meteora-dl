@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.wifi.WifiManager
 import android.os.Build
-import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
@@ -16,10 +15,6 @@ import androidx.core.app.NotificationCompat
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import dev.meteora.meteora.MainActivity
-import dev.meteora.meteora.direct.DirectDownloadQueue
-import dev.meteora.meteora.direct.DirectDownloadSpec
-import dev.meteora.meteora.direct.DirectDownloadStore
-import dev.meteora.meteora.direct.DirectUrlGuard
 import dev.meteora.meteora.engine.NativeEngineManager
 import dev.meteora.meteora.process.SafeProcessExecutor
 import dev.meteora.meteora.storage.DownloadStorageManager
@@ -45,19 +40,10 @@ class DownloadForegroundService : Service() {
         const val ACTION_START = "dev.meteora.ACTION_START_DOWNLOAD"
         const val ACTION_CANCEL = "dev.meteora.ACTION_CANCEL_DOWNLOAD"
         const val ACTION_PAUSE = "dev.meteora.ACTION_PAUSE_DOWNLOAD"
-        const val ACTION_RESUME = "dev.meteora.ACTION_RESUME_DOWNLOAD"
-        const val ACTION_ENQUEUE_DIRECT = "dev.meteora.ACTION_ENQUEUE_DIRECT"
-        const val ACTION_REMOVE_DIRECT = "dev.meteora.ACTION_REMOVE_DIRECT"
 
         const val EXTRA_TASK_ID = "extra_task_id"
         const val EXTRA_COMMAND = "extra_command"
         const val EXTRA_TITLE = "extra_title"
-        const val EXTRA_DIRECT_URL = "extra_direct_url"
-        const val EXTRA_DIRECT_FILENAME = "extra_direct_filename"
-        const val EXTRA_DIRECT_HEADERS = "extra_direct_headers"
-        const val EXTRA_DIRECT_EXPECTED_BYTES = "extra_direct_expected_bytes"
-        const val EXTRA_DIRECT_MAX_SEGMENTS = "extra_direct_max_segments"
-        const val EXTRA_DIRECT_ALLOW_RESUME = "extra_direct_allow_resume"
 
         // Callback interface for streaming download progress events to Flutter
         var progressListener: ((Map<String, Any>) -> Unit)? = null
@@ -74,44 +60,12 @@ class DownloadForegroundService : Service() {
     private lateinit var notificationManager: NotificationManager
     private val processExecutor = SafeProcessExecutor()
     private val storageManager by lazy { DownloadStorageManager(applicationContext) }
-    private val directStore by lazy { DirectDownloadStore(File(filesDir, "direct_queue")) }
-    private var directQueue: DirectDownloadQueue? = null
 
     override fun onCreate() {
         super.onCreate()
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
         acquireLocks()
-        ensureDirectQueue()
-    }
-
-    /**
-     * Owns the plain-HTTP segmented transport. Created once per service instance
-     * and restored from disk, so a resumed queue continues where it stopped.
-     */
-    private fun ensureDirectQueue(): DirectDownloadQueue {
-        directQueue?.let { return it }
-        val queue = DirectDownloadQueue(
-            context = applicationContext,
-            store = directStore,
-            storageManager = storageManager,
-            scope = serviceScope,
-            emitter = { event -> deliverEvent(event) },
-            notifier = { title, content, progress ->
-                updateNotification(title, content, progress)
-            },
-            onIdle = { maybeStopService() },
-        )
-        queue.restore()
-        directQueue = queue
-        return queue
-    }
-
-    private fun maybeStopService() {
-        if (activeTasks.isEmpty() && directQueue?.hasActiveWork() != true) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -125,75 +79,12 @@ class DownloadForegroundService : Service() {
                 startForeground(NOTIFICATION_ID, buildNotification(title, "Starting download...", 0, true))
                 launchDownloadTask(taskId, title, command)
             }
-            ACTION_ENQUEUE_DIRECT -> {
-                startForeground(
-                    NOTIFICATION_ID,
-                    buildNotification(
-                        intent.getStringExtra(EXTRA_TITLE) ?: "Direct download",
-                        "Queued...",
-                        0,
-                        true,
-                    ),
-                )
-                enqueueDirectDownload(intent, taskId)
-            }
-            ACTION_RESUME -> {
-                startForeground(
-                    NOTIFICATION_ID,
-                    buildNotification("Resuming download", "Starting...", 0, true),
-                )
-                ensureDirectQueue().resume(taskId)
-                maybeStopService()
-            }
-            ACTION_PAUSE -> {
-                ensureDirectQueue().pause(taskId)
-                maybeStopService()
-            }
-            ACTION_REMOVE_DIRECT -> {
-                ensureDirectQueue().remove(taskId)
-                maybeStopService()
-            }
-            ACTION_CANCEL -> {
-                directQueue?.cancel(taskId)
+            ACTION_CANCEL, ACTION_PAUSE -> {
                 cancelTask(taskId)
             }
         }
 
         return START_NOT_STICKY
-    }
-
-    private fun enqueueDirectDownload(intent: Intent, taskId: String) {
-        val url = intent.getStringExtra(EXTRA_DIRECT_URL)
-        if (url.isNullOrBlank()) {
-            emitEvent(taskId, "error", 0.0, "0 B/s", "Download URL is missing")
-            maybeStopService()
-            return
-        }
-        DirectUrlGuard.validate(url)?.let { reason ->
-            Log.w(TAG, "Rejected direct download $taskId: $reason")
-            emitEvent(taskId, "error", 0.0, "0 B/s", reason)
-            maybeStopService()
-            return
-        }
-
-        val headerBundle: Bundle? = intent.getBundleExtra(EXTRA_DIRECT_HEADERS)
-        val headers = mutableMapOf<String, String>()
-        headerBundle?.keySet()?.forEach { key ->
-            headerBundle.getString(key)?.let { value -> headers[key] = value }
-        }
-
-        val spec = DirectDownloadSpec(
-            taskId = taskId,
-            url = url,
-            title = intent.getStringExtra(EXTRA_TITLE) ?: url.substringAfterLast('/'),
-            fileName = intent.getStringExtra(EXTRA_DIRECT_FILENAME),
-            headers = headers,
-            expectedBytes = intent.getLongExtra(EXTRA_DIRECT_EXPECTED_BYTES, -1L),
-            maxSegments = intent.getIntExtra(EXTRA_DIRECT_MAX_SEGMENTS, 4),
-            allowResume = intent.getBooleanExtra(EXTRA_DIRECT_ALLOW_RESUME, true),
-        )
-
-        ensureDirectQueue().enqueue(spec)
     }
 
     private fun resolveCommand(rawCommand: List<String>): List<String> {
@@ -300,7 +191,10 @@ class DownloadForegroundService : Service() {
             } finally {
                 stagingDir.deleteRecursively()
                 activeTasks.remove(taskId)
-                maybeStopService()
+                if (activeTasks.isEmpty()) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
             }
         }
 
@@ -520,10 +414,6 @@ class DownloadForegroundService : Service() {
         if (filePath != null) {
             event["filePath"] = filePath
         }
-        deliverEvent(event)
-    }
-
-    private fun deliverEvent(event: Map<String, Any>) {
         try {
             progressListener?.invoke(event)
         } catch (e: Throwable) {
@@ -601,9 +491,6 @@ class DownloadForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Persist per-range progress before the scope dies so the next start
-        // resumes instead of re-downloading from zero.
-        directQueue?.suspendAll()
         serviceScope.cancel()
         releaseLocks()
     }

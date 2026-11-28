@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/app_motion.dart';
 import '../theme/app_shapes.dart';
 import '../theme/app_spacing.dart';
 import 'liquid_glass_container.dart';
+import 'liquid_glass_nav_bar.dart';
 
 class AdaptiveDestination {
   final IconData icon;
@@ -104,8 +104,8 @@ class AdaptiveScaffold extends StatelessWidget {
       );
     }
 
-    // Phone dock: floating glass pill with a sliding glass indicator ribbon.
-    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    // Phone dock: floating iOS Liquid Glass pill with a spring-driven,
+    // scrubbable refractive lens indicator.
     return Scaffold(
       extendBody: true,
       body: IndexedStack(
@@ -117,113 +117,18 @@ class AdaptiveScaffold extends StatelessWidget {
           );
         }),
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            0,
-            AppSpacing.lg,
-            AppSpacing.md,
-          ),
-          child: LiquidGlassContainer(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 6),
-            borderRadius: AppShapes.full,
-            blurSigma: 14,
-            enableBlur: true,
-            style: LiquidGlassStyle.regular,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final count = destinations.length;
-                final tabWidth = constraints.maxWidth / count;
-                final indicatorLeft = currentIndex * tabWidth;
-                final duration = reduceMotion ? Duration.zero : AppMotion.medium;
-                final curve = AppMotion.spring;
-
-                return SizedBox(
-                  height: 62,
-                  child: Stack(
-                    children: [
-                      // Sliding glass indicator (no blur during motion: static tint only).
-                      AnimatedPositioned(
-                        duration: duration,
-                        curve: curve,
-                        left: indicatorLeft,
-                        top: 0,
-                        bottom: 0,
-                        width: tabWidth,
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: AnimatedContainer(
-                            duration: duration,
-                            curve: curve,
-                            decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer.withAlpha(
-                                theme.brightness == Brightness.dark ? 165 : 205,
-                              ),
-                              borderRadius: BorderRadius.circular(AppShapes.full),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Row(
-                        children: List.generate(destinations.length, (index) {
-                          final dest = destinations[index];
-                          final selected = index == currentIndex;
-
-                          return Expanded(
-                            child: Semantics(
-                              button: true,
-                              selected: selected,
-                              label: dest.label,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(AppShapes.full),
-                                onTap: () => _select(index),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 7),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      AnimatedScale(
-                                        scale: selected ? 1.12 : 1.0,
-                                        duration: duration,
-                                        curve: curve,
-                                        child: Icon(
-                                          selected ? dest.selectedIcon : dest.icon,
-                                          size: 22,
-                                          color: selected
-                                              ? colorScheme.onPrimaryContainer
-                                              : colorScheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        dest.label,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.labelSmall?.copyWith(
-                                          color: selected
-                                              ? colorScheme.onPrimaryContainer
-                                              : colorScheme.onSurfaceVariant,
-                                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
+      bottomNavigationBar: LiquidGlassNavBar(
+        currentIndex: currentIndex,
+        onDestinationSelected: _select,
+        destinations: destinations
+            .map(
+              (d) => LiquidGlassNavDestination(
+                icon: d.icon,
+                selectedIcon: d.selectedIcon,
+                label: d.label,
+              ),
+            )
+            .toList(),
       ),
     );
   }
